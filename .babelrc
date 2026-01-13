@@ -1,7 +1,7 @@
 {
   "plugins": [
     [
-      "@babel/plugin-transform-jsx",
+      "@babel/plugin-transform-react-jsx",
       {
         "pragma": "h" // 自定义函数名，取代React.createElement
       }
