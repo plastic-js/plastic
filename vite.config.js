@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import babel from 'vite-plugin-babel'
+import path from 'path'
 
 export default defineConfig({
 	plugins: [
@@ -10,13 +11,18 @@ export default defineConfig({
 						'@babel/preset-react',
 						{
 							runtime: 'automatic',
-							importSource: '.',
+							importSource: 'jsx',
 						},
 					],
 				],
 			},
 		}),
 	],
+	resolve: {
+		alias: {
+			'jsx/jsx-runtime': path.resolve(__dirname, './jsx-runtime.js'),
+		},
+	},
 	build: {
 		outDir: 'dist',
 	},
