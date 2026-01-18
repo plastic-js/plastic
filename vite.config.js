@@ -5,7 +5,15 @@ export default defineConfig({
   plugins: [
     babel({
       babelConfig: {
-        presets: ['@babel/preset-react']
+        presets: [
+          [
+            '@babel/preset-react',
+            {
+              runtime: 'automatic',
+              importSource: '.'
+            }
+          ]
+        ]
       }
     })
   ],
