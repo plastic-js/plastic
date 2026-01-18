@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "build": "babel app.jsx -o app.js",
-    "watch": "babel app.jsx -o app.js --watch",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -17,6 +18,8 @@
   "devDependencies": {
     "@babel/cli": "^7.28.6",
     "@babel/core": "^7.28.6",
-    "@babel/plugin-transform-react-jsx": "^7.28.6"
+    "@babel/preset-react": "^7.28.5",
+    "vite": "^7.3.1",
+    "vite-plugin-babel": "^1.4.1"
   }
 }
