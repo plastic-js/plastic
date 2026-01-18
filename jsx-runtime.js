@@ -18,11 +18,26 @@ function h(tag, props = {}, ...children) {
   
   const element = document.createElement(tag);
   
+  // 从 props 中提取 children（Babel 会将 JSX children 放在 props.children）
+  if (props && props.children) {
+    const propsChildren = props.children;
+    if (Array.isArray(propsChildren)) {
+      children = [...propsChildren, ...children];
+    } else {
+      children = [propsChildren, ...children];
+    }
+  }
+  
   // 缓存需要动态更新的属性
   const dynamicProps = {};
   const listeners = {};
   
   Object.entries(props || {}).forEach(([key, value]) => {
+    // 跳过 children 属性
+    if (key === 'children') {
+      return;
+    }
+    
     if (key.startsWith('on') && typeof value === 'function') {
       // 处理事件监听器
       const eventName = key.slice(2).toLowerCase();
@@ -63,7 +78,12 @@ function h(tag, props = {}, ...children) {
   // 处理子元素，支持 signal 和普通值
   const processChildren = (childList) => {
     childList.forEach(child => {
-      if (typeof child === 'function' && !(child instanceof Element)) {
+      // 优先检查是否是 DOM 节点
+      if (child instanceof Node) {
+        element.appendChild(child);
+      } else if (Array.isArray(child)) {
+        processChildren(child);
+      } else if (typeof child === 'function') {
         // 可能是 signal 的 getter
         try {
           const value = child();
@@ -85,11 +105,11 @@ function h(tag, props = {}, ...children) {
         }
       } else if (typeof child === 'string') {
         element.appendChild(document.createTextNode(child));
-      } else if (child instanceof Node) {
-        element.appendChild(child);
-      } else if (Array.isArray(child)) {
-        processChildren(child);
+      } else if (typeof child === 'number' || typeof child === 'boolean') {
+        element.appendChild(document.createTextNode(String(child)));
       } else if (child !== null && child !== undefined) {
+        // 对于其他类型，只转换为字符串（用于调试）
+        console.warn('Unexpected child type:', child);
         element.appendChild(document.createTextNode(String(child)));
       }
     });
@@ -104,3 +124,7 @@ function h(tag, props = {}, ...children) {
  * 导出响应式API供用户使用
  */
 export { signal, computed, effect, h };
+
+// Babel自动JSX运行时接口
+export const jsx = h;
+export const jsxs = h;
