@@ -13,6 +13,9 @@ export default [
 		languageOptions: {
 			parserOptions: {
 				sourceType: 'module',
+				ecmaFeatures: {
+					jsx: true,
+				},
 			},
 			globals: {
 				window: 'readonly',

@@ -1,7 +1,5 @@
+const Label = ()=> {
+	return <label>This is a label component</label>
+}
 
-
-const Label = () => {
-    return <label>This is a label component</label>;
-};
-
-export default Label;
+export default Label
