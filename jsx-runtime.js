@@ -62,13 +62,13 @@ function h(tag, props = {}, ...children) {
         // 可能是 signal 的 getter
         try {
           const value = child();
-          if (typeof value === 'string') {
-            const textNode = document.createTextNode(value);
+          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            const textNode = document.createTextNode(String(value));
             element.appendChild(textNode);
             
-            // 为字符串 signal 创建 effect 自动更新
+            // 为文本 signal 创建 effect 自动更新
             effect(() => {
-              textNode.textContent = child();
+              textNode.textContent = String(child());
             });
           } else if (value instanceof Node) {
             element.appendChild(value);
