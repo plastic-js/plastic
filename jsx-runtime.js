@@ -1,4 +1,3 @@
-// import { signal, computed, effect } from './node_modules/alien-signals/esm/index.mjs';
 import { signal, computed, effect } from 'alien-signals';
 
 // 存储当前活跃的effect范围，用于自动订阅信号
