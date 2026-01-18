@@ -11,6 +11,11 @@ let currentEffect = null;
  * @returns {Element} DOM element
  */
 function h(tag, props = {}, ...children) {
+  // 檢查是否是組件函數
+  if (typeof tag === 'function') {
+    return tag(props, ...children);
+  }
+  
   const element = document.createElement(tag);
   
   // 缓存需要动态更新的属性

@@ -1,11 +1,12 @@
 import { signal, computed, h } from './jsx-runtime.js';
+import Label from './Label.jsx';
 
 // 创建响应式状态
 const count = signal(0);
 const doubleCount = computed(() => count() * 2);
 const App = () => h("div", {
   className: "container"
-}, h("h1", null, "Hello, Reactive JSX!"), h("div", {
+}, h(Label, null), h("div", {
   className: "counter"
 }, h("p", null, "Count: ", () => count()), h("p", null, "Double Count: ", () => doubleCount())), h("div", {
   className: "buttons"
