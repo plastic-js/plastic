@@ -19,6 +19,7 @@ export default [
 			},
 			globals: {
 				...globals.browser,
+				__dirname: 'readonly',
 			},
 		},
 		rules: {

@@ -10,8 +10,8 @@ const App = ()=> <div className='container'>
 	<Label text='This is a label component--foo' />
 
 	<div className='counter'>
-		<p>Count: {()=> count()}</p>
-		<p>Double Count: {()=> doubleCount()}</p>
+		<p>Count: { count}</p>
+		<p>Double Count: { doubleCount }</p>
 	</div>
 
 	<div className='buttons'>
@@ -35,7 +35,7 @@ const App = ()=> <div className='container'>
 	</div>
 
 	<div className='info'>
-		<p>Status: {()=> (count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal')}</p>
+		<p>Status: {()=> count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal'}</p>
 	</div>
 </div>
 
