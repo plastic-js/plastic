@@ -2,12 +2,13 @@ import {
 	computed, effect, isComputed, isSignal, signal,
 } from 'alien-signals'
 
+const isReactive = value=> isSignal(value) || isComputed(value)
 /**
  * 安全获取可能是 signal 的值
  */
 function getSignalValue(value){
 	try {
-		return isSignal(value) ? value() : value
+		return isReactive(value) ? value() : value
 	} catch {
 		return null
 	}
@@ -83,7 +84,7 @@ function separateProps(props){
 		if (key.startsWith('on') && typeof value === 'function'){
 			const eventName = key.slice(2).toLowerCase()
 			eventListeners[eventName] = value
-		} else if (isSignal(value)){
+		} else if (isReactive(value)){
 			dynamicProps[key] = value
 		} else {
 			staticProps[key] = value
@@ -163,12 +164,12 @@ function appendChild(parent, child){
 		return
 	}
 
-	// Signal（响应式值）
-	if (isSignal(child)){
+	// Signal 或 Computed（响应式值）
+	if (isReactive(child)){
 		const value = getSignalValue(child)
 		appendChild(parent, value)
 
-		// 为文本类型的 signal 创建响应式更新
+		// 为文本类型的 signal/computed 创建响应式更新
 		const textNode = document.createTextNode('')
 		parent.appendChild(textNode)
 
