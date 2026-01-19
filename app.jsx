@@ -1,12 +1,13 @@
 import { computed, h, signal } from './jsx-runtime.js'
 import Label from './components/Label.jsx'
+import './global.css'
 
 // 创建响应式状态
 const count = signal(0)
 const doubleCount = computed(()=> count() * 2)
 
 const App = ()=> <div className='container'>
-	<Label />
+	<Label text='This is a label component--foo' />
 
 	<div className='counter'>
 		<p>Count: {()=> count()}</p>
@@ -34,7 +35,7 @@ const App = ()=> <div className='container'>
 	</div>
 
 	<div className='info'>
-		<p>Status: {()=> count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal'}</p>
+		<p>Status: {()=> (count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal')}</p>
 	</div>
 </div>
 

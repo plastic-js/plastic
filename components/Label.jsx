@@ -1,5 +1,5 @@
-const Label = ()=> {
-	return <label>This is a label component</label>
+const Label = (props)=> {
+	return <label>{props.text}</label>
 }
 
 export default Label
