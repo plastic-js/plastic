@@ -166,9 +166,6 @@ const appendChild = (parent, child)=> {
 
 	// Signal 或 Computed（响应式值）
 	if (isReactive(child)){
-		const value = getReactiveValue(child)
-		appendChild(parent, value)
-
 		// 为文本类型的 signal/computed 创建响应式更新
 		const textNode = document.createTextNode('')
 		parent.appendChild(textNode)
