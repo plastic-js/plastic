@@ -6,7 +6,7 @@ const isReactive = value=> isSignal(value) || isComputed(value)
 /**
  * 安全获取可能是 signal 的值
  */
-const getSignalValue = (value)=> {
+const getReactiveValue = (value)=> {
 	try {
 		return isReactive(value) ? value() : value
 	} catch {
@@ -122,14 +122,14 @@ const attachEventListeners = (element, listeners)=> {
 const setupDynamicProps = (element, props)=> {
 	Object.entries(props).forEach(([key, getter])=> {
 		// 设置初始值
-		const initialValue = getSignalValue(getter)
+		const initialValue = getReactiveValue(getter)
 		if (initialValue != null){
 			element.setAttribute(key, toString(initialValue))
 		}
 
 		// 创建响应式更新
 		effect(()=> {
-			const value = getSignalValue(getter)
+			const value = getReactiveValue(getter)
 			if (value != null){
 				element.setAttribute(key, toString(value))
 			} else {
@@ -166,7 +166,7 @@ const appendChild = (parent, child)=> {
 
 	// Signal 或 Computed（响应式值）
 	if (isReactive(child)){
-		const value = getSignalValue(child)
+		const value = getReactiveValue(child)
 		appendChild(parent, value)
 
 		// 为文本类型的 signal/computed 创建响应式更新
@@ -174,7 +174,7 @@ const appendChild = (parent, child)=> {
 		parent.appendChild(textNode)
 
 		effect(()=> {
-			const newValue = getSignalValue(child)
+			const newValue = getReactiveValue(child)
 			if (newValue != null){
 				textNode.textContent = toString(newValue)
 			}
