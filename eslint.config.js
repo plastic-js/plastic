@@ -24,6 +24,7 @@ export default [
 		rules: {
 			'react/prop-types': 0,
 			'react/button-has-type': 0,
+			'@stylistic/js/no-extra-parens': ['error', 'all', { ignoreJSX: 'all' }],
 		},
 	},
 ]

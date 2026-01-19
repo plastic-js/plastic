@@ -9,7 +9,6 @@ const level = computed(()=> {
 	return count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal'
 })
 
-// eslint-disable-next-line @stylistic/js/no-extra-parens
 const App = ()=> (
 	<div className='container'>
 		<Label text='This is a label component--foo' />
