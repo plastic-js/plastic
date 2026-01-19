@@ -5,6 +5,9 @@ import './global.css'
 // 创建响应式状态
 const count = signal(0)
 const doubleCount = computed(()=> count() * 2)
+const abc = ()=> {
+	return count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal'
+}
 
 const App = ()=> <div className='container'>
 	<Label text='This is a label component--foo' />
@@ -35,7 +38,7 @@ const App = ()=> <div className='container'>
 	</div>
 
 	<div className='info'>
-		<p>Status: {()=> count() > 5 ? 'High!' : count() < -5 ? 'Low!' : 'Normal'}</p>
+		<p>Status: {abc}</p>
 	</div>
 </div>
 
