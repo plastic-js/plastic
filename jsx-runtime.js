@@ -181,8 +181,42 @@ const appendChild = (parent, child)=> {
 
 	// 普通函数（执行函数并渲染其返回值）
 	if (typeof child === 'function'){
-		const result = child()
-		appendChild(parent, result)
+		// 创建一个占位节点用于动态内容替换
+		const placeholder = document.createComment('dynamic')
+		parent.appendChild(placeholder)
+
+		let currentNodes = []
+
+		effect(()=> {
+			// 执行函数获取结果
+			const result = child()
+
+			// 清除之前的节点
+			currentNodes.forEach((node)=> {
+				if (node.parentNode === parent){
+					parent.removeChild(node)
+				}
+			})
+			currentNodes = []
+
+			// 处理新结果
+			if (result == null){
+				return
+			}
+
+			// 如果结果是响应式值，获取其当前值
+			const actualValue = isReactive(result) ? getReactiveValue(result) : result
+
+			// 创建临时容器来收集新节点
+			const tempContainer = document.createElement('div')
+			appendChild(tempContainer, actualValue)
+
+			// 将新节点插入到占位符之前
+			currentNodes = [...tempContainer.childNodes]
+			currentNodes.forEach((node)=> {
+				parent.insertBefore(node, placeholder)
+			})
+		})
 		return
 	}
 

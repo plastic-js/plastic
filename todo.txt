@@ -1,0 +1,9 @@
+大哉問
+
+1。是否用web component
+2。 列表 key 處理：列表更新時會有 bug
+3.重复的 Effect 订阅（性能问题）缺少 Fragment 支持
+4.Fragment 支持:代碼可讀性提升
+5.缺少 Fragment 支持
+6.列表渲染缺少 Key 优化
+7.Effect 清理缺失
