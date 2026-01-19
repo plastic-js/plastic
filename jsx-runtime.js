@@ -6,7 +6,7 @@ const isReactive = value=> isSignal(value) || isComputed(value)
 /**
  * 安全获取可能是 signal 的值
  */
-function getSignalValue(value){
+const getSignalValue = (value)=> {
 	try {
 		return isReactive(value) ? value() : value
 	} catch {
@@ -17,7 +17,7 @@ function getSignalValue(value){
 /**
  * 转换值为字符串
  */
-function toString(value){
+const toString = (value)=> {
 	return String(value ?? '')
 }
 
@@ -28,7 +28,7 @@ function toString(value){
  * @param {...any} children - Child elements or text
  * @returns {Element|*} DOM element or component result
  */
-function h(tag, props = {}, ...children){
+const h = (tag, props = {}, ...children)=> {
 	// 如果是组件函数，直接调用
 	if (typeof tag === 'function'){
 		return tag(props, ...children)
@@ -62,7 +62,7 @@ function h(tag, props = {}, ...children){
 /**
  * 合并 props.children 和参数中的 children
  */
-function mergeChildren(props, paramChildren){
+const mergeChildren = (props, paramChildren)=> {
 	const propsChildren = props?.children
 	if (!propsChildren){ return paramChildren }
 
@@ -73,7 +73,7 @@ function mergeChildren(props, paramChildren){
 /**
  * 将 props 分离为事件监听器、动态属性和静态属性
  */
-function separateProps(props){
+const separateProps = (props)=> {
 	const eventListeners = {}
 	const dynamicProps = {}
 	const staticProps = {}
@@ -99,7 +99,7 @@ function separateProps(props){
 /**
  * 应用静态属性到元素
  */
-function applyStaticProps(element, props){
+const applyStaticProps = (element, props)=> {
 	Object.entries(props).forEach(([key, value])=> {
 		if (value != null){
 			element.setAttribute(key, toString(value))
@@ -110,7 +110,7 @@ function applyStaticProps(element, props){
 /**
  * 为元素绑定事件监听器
  */
-function attachEventListeners(element, listeners){
+const attachEventListeners = (element, listeners)=> {
 	Object.entries(listeners).forEach(([eventName, handler])=> {
 		element.addEventListener(eventName, handler)
 	})
@@ -119,7 +119,7 @@ function attachEventListeners(element, listeners){
 /**
  * 为动态属性设置响应式更新
  */
-function setupDynamicProps(element, props){
+const setupDynamicProps = (element, props)=> {
 	Object.entries(props).forEach(([key, getter])=> {
 		// 设置初始值
 		const initialValue = getSignalValue(getter)
@@ -142,7 +142,7 @@ function setupDynamicProps(element, props){
 /**
  * 递归处理并附加子元素到父元素
  */
-function appendChildren(parent, children){
+const appendChildren = (parent, children)=> {
 	children.forEach((child)=> {
 		appendChild(parent, child)
 	})
@@ -151,7 +151,7 @@ function appendChildren(parent, children){
 /**
  * 附加单个子元素到父元素
  */
-function appendChild(parent, child){
+const appendChild = (parent, child)=> {
 	// DOM 节点
 	if (child instanceof Node){
 		parent.appendChild(child)
