@@ -182,6 +182,13 @@ const appendChild = (parent, child)=> {
 		return
 	}
 
+	// 普通函数（执行函数并渲染其返回值）
+	if (typeof child === 'function'){
+		const result = child()
+		appendChild(parent, result)
+		return
+	}
+
 	// 基本类型（字符串、数字、布尔值）
 	if (typeof child === 'string' || typeof child === 'number' || typeof child === 'boolean'){
 		parent.appendChild(document.createTextNode(toString(child)))
