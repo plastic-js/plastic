@@ -19,6 +19,7 @@
   "devDependencies": {
     "@babel/cli": "^7.28.6",
     "@babel/core": "^7.28.6",
+    "eslint-plugin-react": "^7.37.5",
     "@babel/preset-react": "^7.28.5",
     "eslint": "^9.39.2",
     "eslint-config-janus": "^9.0.21",
