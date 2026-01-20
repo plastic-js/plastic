@@ -51,7 +51,7 @@ const h = (tag, props = {}, ...children)=> {
 	attachEventListeners(element, eventListeners)
 
 	// 设置动态属性的响应式更新
-	setupDynamicProps(element, dynamicProps)
+	const cleanups = setupDynamicProps(element, dynamicProps)
 
 	// 处理子元素
 	appendChildren(element, allChildren)
@@ -120,7 +120,7 @@ const attachEventListeners = (element, listeners)=> {
  * 为动态属性设置响应式更新
  */
 const setupDynamicProps = (element, props)=> {
-	Object.entries(props).forEach(([key, getter])=> {
+	return Object.entries(props).map(([key, getter])=> {
 		// 设置初始值
 		const initialValue = getReactiveValue(getter)
 		if (initialValue != null){
@@ -128,7 +128,7 @@ const setupDynamicProps = (element, props)=> {
 		}
 
 		// 创建响应式更新
-		effect(()=> {
+		return effect(()=> {
 			const value = getReactiveValue(getter)
 			if (value != null){
 				element.setAttribute(key, toString(value))
@@ -144,7 +144,7 @@ const setupDynamicProps = (element, props)=> {
  */
 const appendChildren = (parent, children)=> {
 	children.forEach((child)=> {
-		appendChild(parent, child)
+		const maybeCleanup = appendChild(parent, child)
 	})
 }
 
@@ -170,13 +170,12 @@ const appendChild = (parent, child)=> {
 		const textNode = document.createTextNode('')
 		parent.appendChild(textNode)
 
-		effect(()=> {
+		return effect(()=> {
 			const newValue = getReactiveValue(child)
 			if (newValue != null){
 				textNode.textContent = toString(newValue)
 			}
 		})
-		return
 	}
 
 	// 普通函数（执行函数并渲染其返回值）
@@ -187,7 +186,7 @@ const appendChild = (parent, child)=> {
 
 		let currentNodes = []
 
-		effect(()=> {
+		return effect(()=> {
 			// 执行函数获取结果
 			const result = child()
 
@@ -217,7 +216,6 @@ const appendChild = (parent, child)=> {
 				parent.insertBefore(node, placeholder)
 			})
 		})
-		return
 	}
 
 	// 基本类型（字符串、数字、布尔值）
