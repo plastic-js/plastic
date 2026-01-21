@@ -3,7 +3,7 @@ import {
 } from 'alien-signals'
 
 const MOUNT_KEY = Symbol('onMount')
-const CLEANUP_KEY = Symbol('onCleanup')
+const CLEANUP_KEY = Symbol('onUnmount')
 let currentComponentContext = null
 
 const onMount = (fn)=> {
@@ -14,11 +14,11 @@ const onMount = (fn)=> {
 	}
 }
 
-const onCleanup = (fn)=> {
+const onUnmount = (fn)=> {
 	if (currentComponentContext){
-		currentComponentContext.cleanups.push(fn)
+		currentComponentContext.unmounts.push(fn)
 	} else {
-		console.warn('onCleanup called outside component')
+		console.warn('onUnmount called outside component')
 	}
 }
 
@@ -36,6 +36,7 @@ const runCleanup = (node)=> {
 	if (!node){ return }
 	const cleanups = node[CLEANUP_KEY]
 	if (Array.isArray(cleanups) && cleanups.length){
+		// 反向执行清理函数，為什麼要這樣？
 		for (let i = cleanups.length - 1; i >= 0; i--){
 			try { cleanups[i].call(node) } catch(e){ console.error(e) }
 		}
@@ -75,7 +76,7 @@ const h = (tag, props = {}, ...children)=> {
 	// 如果是组件函数，直接调用
 	if (typeof tag === 'function'){
 		const prev = currentComponentContext
-		const context = { mounts: [], cleanups: [] }
+		const context = { mounts: [], unmounts: [] }
 		currentComponentContext = context
 		const result = tag(props, ...children)
 		currentComponentContext = prev
@@ -86,7 +87,7 @@ const h = (tag, props = {}, ...children)=> {
 			context.mounts.forEach((fn)=> {
 				if (!result[MOUNT_KEY].includes(fn)){ result[MOUNT_KEY].push(fn) }
 			})
-			context.cleanups.forEach((fn)=> {
+			context.unmounts.forEach((fn)=> {
 				if (!result[CLEANUP_KEY].includes(fn)){ result[CLEANUP_KEY].push(fn) }
 			})
 		}
@@ -111,17 +112,17 @@ const h = (tag, props = {}, ...children)=> {
 	const eventRemovers = attachEventListeners(element, eventListeners)
 
 	// 设置动态属性的响应式更新
-	const cleanups = setupDynamicProps(element, dynamicProps)
+	const stops = setupDynamicProps(element, dynamicProps)
 
 	// ensure element has cleanup storage
 	element[CLEANUP_KEY] = element[CLEANUP_KEY] || []
 
-	// register event removers and reactive cleanups to element cleanup
+	// register event removers and reactive stops to element cleanup
 	if (Array.isArray(eventRemovers) && eventRemovers.length){
 		element[CLEANUP_KEY].push(...eventRemovers)
 	}
-	if (Array.isArray(cleanups) && cleanups.length){
-		element[CLEANUP_KEY].push(...cleanups)
+	if (Array.isArray(stops) && stops.length){
+		element[CLEANUP_KEY].push(...stops)
 	}
 
 	// 处理子元素
@@ -337,7 +338,7 @@ const appendChild = (parent, child)=> {
 }
 
 export {
-	signal, computed, effect, h, onMount, onCleanup,
+	signal, computed, effect, h, onMount, onUnmount,
 }
 export const jsx = h
 export const jsxs = h
