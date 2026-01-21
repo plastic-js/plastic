@@ -2,6 +2,50 @@ import {
 	computed, effect, isComputed, isSignal, signal,
 } from 'alien-signals'
 
+const MOUNT_KEY = Symbol('onMount')
+const CLEANUP_KEY = Symbol('onUnmount')
+let currentComponentContext = null
+
+const onMount = (fn)=> {
+	if (currentComponentContext){
+		currentComponentContext.mounts.push(fn)
+	} else {
+		console.warn('onMount called outside component')
+	}
+}
+
+const onUnmount = (fn)=> {
+	if (currentComponentContext){
+		currentComponentContext.unmounts.push(fn)
+	} else {
+		console.warn('onUnmount called outside component')
+	}
+}
+
+const runMount = (node)=> {
+	if (!node){ return }
+	const mounts = node[MOUNT_KEY]
+	if (Array.isArray(mounts) && mounts.length){
+		mounts.forEach((fn)=> {
+			try { fn.call(node) } catch(e){ console.error(e) }
+		})
+	}
+}
+
+const runCleanup = (node)=> {
+	if (!node){ return }
+	const cleanups = node[CLEANUP_KEY]
+	if (Array.isArray(cleanups) && cleanups.length){
+		// 反向执行清理函数，為什麼要這樣？
+		for (let i = cleanups.length - 1; i >= 0; i--){
+			try { cleanups[i].call(node) } catch(e){ console.error(e) }
+		}
+	}
+
+	// recursively cleanup children
+	node.childNodes && node.childNodes.forEach(child=> runCleanup(child))
+}
+
 const isReactive = value=> isSignal(value) || isComputed(value)
 /**
  * 安全获取可能是 signal 的值
@@ -31,7 +75,24 @@ const toString = (value)=> {
 const h = (tag, props = {}, ...children)=> {
 	// 如果是组件函数，直接调用
 	if (typeof tag === 'function'){
-		return tag(props, ...children)
+		const prev = currentComponentContext
+		const context = { mounts: [], unmounts: [] }
+		currentComponentContext = context
+		const result = tag(props, ...children)
+		currentComponentContext = prev
+
+		if (result instanceof Node){
+			result[MOUNT_KEY] = result[MOUNT_KEY] || []
+			result[CLEANUP_KEY] = result[CLEANUP_KEY] || []
+			context.mounts.forEach((fn)=> {
+				if (!result[MOUNT_KEY].includes(fn)){ result[MOUNT_KEY].push(fn) }
+			})
+			context.unmounts.forEach((fn)=> {
+				if (!result[CLEANUP_KEY].includes(fn)){ result[CLEANUP_KEY].push(fn) }
+			})
+		}
+
+		return result
 	}
 
 	const element = document.createElement(tag)
@@ -48,10 +109,21 @@ const h = (tag, props = {}, ...children)=> {
 	applyStaticProps(element, staticProps)
 
 	// 绑定事件监听器
-	attachEventListeners(element, eventListeners)
+	const eventRemovers = attachEventListeners(element, eventListeners)
 
 	// 设置动态属性的响应式更新
-	setupDynamicProps(element, dynamicProps)
+	const stops = setupDynamicProps(element, dynamicProps)
+
+	// ensure element has cleanup storage
+	element[CLEANUP_KEY] = element[CLEANUP_KEY] || []
+
+	// register event removers and reactive stops to element cleanup
+	if (Array.isArray(eventRemovers) && eventRemovers.length){
+		element[CLEANUP_KEY].push(...eventRemovers)
+	}
+	if (Array.isArray(stops) && stops.length){
+		element[CLEANUP_KEY].push(...stops)
+	}
 
 	// 处理子元素
 	appendChildren(element, allChildren)
@@ -111,16 +183,19 @@ const applyStaticProps = (element, props)=> {
  * 为元素绑定事件监听器
  */
 const attachEventListeners = (element, listeners)=> {
+	const removers = []
 	Object.entries(listeners).forEach(([eventName, handler])=> {
 		element.addEventListener(eventName, handler)
+		removers.push(()=> element.removeEventListener(eventName, handler))
 	})
+	return removers
 }
 
 /**
  * 为动态属性设置响应式更新
  */
 const setupDynamicProps = (element, props)=> {
-	Object.entries(props).forEach(([key, getter])=> {
+	return Object.entries(props).map(([key, getter])=> {
 		// 设置初始值
 		const initialValue = getReactiveValue(getter)
 		if (initialValue != null){
@@ -128,7 +203,7 @@ const setupDynamicProps = (element, props)=> {
 		}
 
 		// 创建响应式更新
-		effect(()=> {
+		return effect(()=> {
 			const value = getReactiveValue(getter)
 			if (value != null){
 				element.setAttribute(key, toString(value))
@@ -144,7 +219,7 @@ const setupDynamicProps = (element, props)=> {
  */
 const appendChildren = (parent, children)=> {
 	children.forEach((child)=> {
-		appendChild(parent, child)
+		const maybeCleanup = appendChild(parent, child)
 	})
 }
 
@@ -155,6 +230,8 @@ const appendChild = (parent, child)=> {
 	// DOM 节点
 	if (child instanceof Node){
 		parent.appendChild(child)
+		// 仅当父节点已连接到文档时才触发 mount，避免在临时容器中重复触发
+		if (parent.isConnected){ runMount(child) }
 		return
 	}
 
@@ -166,17 +243,40 @@ const appendChild = (parent, child)=> {
 
 	// Signal 或 Computed（响应式值）
 	if (isReactive(child)){
-		// 为文本类型的 signal/computed 创建响应式更新
-		const textNode = document.createTextNode('')
-		parent.appendChild(textNode)
+		// 响应式值可能是文本、DOM 节点、数组或组件返回值等。
+		// 使用占位节点并在值变化时替换其前面的节点集合。
+		const placeholder = document.createComment('reactive')
+		parent.appendChild(placeholder)
 
-		effect(()=> {
+		let currentNodes = []
+
+		return effect(()=> {
 			const newValue = getReactiveValue(child)
-			if (newValue != null){
-				textNode.textContent = toString(newValue)
+			// 清除旧节点
+			currentNodes.forEach((node)=> {
+				if (node.parentNode === parent){
+					runCleanup(node)
+					parent.removeChild(node)
+				}
+			})
+			currentNodes = []
+			// 後面的代碼，是否還能繼續加入跟蹤列表
+			if (newValue == null){
+				return
 			}
+
+			const actualValue = isReactive(newValue) ? getReactiveValue(newValue) : newValue
+
+			// 使用临时容器来复用现有的 appendChild 逻辑
+			const tempContainer = document.createElement('div')
+			appendChild(tempContainer, actualValue)
+
+			currentNodes = [...tempContainer.childNodes]
+			currentNodes.forEach((node)=> {
+				parent.insertBefore(node, placeholder)
+				runMount(node)
+			})
 		})
-		return
 	}
 
 	// 普通函数（执行函数并渲染其返回值）
@@ -187,13 +287,14 @@ const appendChild = (parent, child)=> {
 
 		let currentNodes = []
 
-		effect(()=> {
+		return effect(()=> {
 			// 执行函数获取结果
 			const result = child()
 
 			// 清除之前的节点
 			currentNodes.forEach((node)=> {
 				if (node.parentNode === parent){
+					runCleanup(node)
 					parent.removeChild(node)
 				}
 			})
@@ -215,9 +316,9 @@ const appendChild = (parent, child)=> {
 			currentNodes = [...tempContainer.childNodes]
 			currentNodes.forEach((node)=> {
 				parent.insertBefore(node, placeholder)
+				runMount(node)
 			})
 		})
-		return
 	}
 
 	// 基本类型（字符串、数字、布尔值）
@@ -237,7 +338,7 @@ const appendChild = (parent, child)=> {
 }
 
 export {
-	signal, computed, effect, h,
+	signal, computed, effect, h, onMount, onUnmount,
 }
 export const jsx = h
 export const jsxs = h
