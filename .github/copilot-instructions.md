@@ -1,7 +1,7 @@
 # Repository Instructions for GitHub Copilot
 
 ## Coding Standards
-- **JavaScript Syntax**: Use modern JavaScript (ES6+) features and syntax.
+- **JavaScript Syntax**: Use modern JavaScript (ECMAScript 2020+) features and syntax.
 - **Function Definitions**: Always prefer **arrow functions** (`const myFunc = () => {}`) over traditional `function` declarations.
 - **Asynchronous Patterns**: 
     - Prefer using **Promises** with `.then()` and `.catch()` chains rather than `async/await` syntax. 
