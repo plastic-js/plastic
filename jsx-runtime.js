@@ -2,6 +2,51 @@ import {
 	computed, effect, isComputed, isSignal, signal,
 } from 'alien-signals'
 
+const MOUNT_KEY = Symbol('onMount')
+const CLEANUP_KEY = Symbol('onCleanup')
+let currentComponentContext = null
+
+const onMount = (fn)=> {
+	if (currentComponentContext){
+		currentComponentContext.mounts.push(fn)
+	} else {
+		console.warn('onMount called outside component')
+	}
+}
+
+const onCleanup = (fn)=> {
+	if (currentComponentContext){
+		currentComponentContext.cleanups.push(fn)
+	} else {
+		console.warn('onCleanup called outside component')
+	}
+}
+
+const runMount = (node)=> {
+	if (!node){ return }
+	const mounts = node[MOUNT_KEY]
+	if (Array.isArray(mounts) && mounts.length){
+		mounts.forEach((fn)=> {
+			try { fn.call(node) } catch(e){ console.error(e) }
+		})
+		node[MOUNT_KEY] = []
+	}
+}
+
+const runCleanup = (node)=> {
+	if (!node){ return }
+	const cleanups = node[CLEANUP_KEY]
+	if (Array.isArray(cleanups) && cleanups.length){
+		for (let i = cleanups.length - 1; i >= 0; i--){
+			try { cleanups[i].call(node) } catch(e){ console.error(e) }
+		}
+		node[CLEANUP_KEY] = []
+	}
+
+	// recursively cleanup children
+	node.childNodes && node.childNodes.forEach(child=> runCleanup(child))
+}
+
 const isReactive = value=> isSignal(value) || isComputed(value)
 /**
  * 安全获取可能是 signal 的值
@@ -31,7 +76,18 @@ const toString = (value)=> {
 const h = (tag, props = {}, ...children)=> {
 	// 如果是组件函数，直接调用
 	if (typeof tag === 'function'){
-		return tag(props, ...children)
+		const prev = currentComponentContext
+		const context = { mounts: [], cleanups: [] }
+		currentComponentContext = context
+		const result = tag(props, ...children)
+		currentComponentContext = prev
+
+		if (result instanceof Node){
+			result[MOUNT_KEY] = [...result[MOUNT_KEY] || [], ...context.mounts]
+			result[CLEANUP_KEY] = [...result[CLEANUP_KEY] || [], ...context.cleanups]
+		}
+
+		return result
 	}
 
 	const element = document.createElement(tag)
@@ -48,10 +104,21 @@ const h = (tag, props = {}, ...children)=> {
 	applyStaticProps(element, staticProps)
 
 	// 绑定事件监听器
-	attachEventListeners(element, eventListeners)
+	const eventRemovers = attachEventListeners(element, eventListeners)
 
 	// 设置动态属性的响应式更新
 	const cleanups = setupDynamicProps(element, dynamicProps)
+
+	// ensure element has cleanup storage
+	element[CLEANUP_KEY] = element[CLEANUP_KEY] || []
+
+	// register event removers and reactive cleanups to element cleanup
+	if (Array.isArray(eventRemovers) && eventRemovers.length){
+		element[CLEANUP_KEY].push(...eventRemovers)
+	}
+	if (Array.isArray(cleanups) && cleanups.length){
+		element[CLEANUP_KEY].push(...cleanups)
+	}
 
 	// 处理子元素
 	appendChildren(element, allChildren)
@@ -111,9 +178,12 @@ const applyStaticProps = (element, props)=> {
  * 为元素绑定事件监听器
  */
 const attachEventListeners = (element, listeners)=> {
+	const removers = []
 	Object.entries(listeners).forEach(([eventName, handler])=> {
 		element.addEventListener(eventName, handler)
+		removers.push(()=> element.removeEventListener(eventName, handler))
 	})
+	return removers
 }
 
 /**
@@ -155,6 +225,7 @@ const appendChild = (parent, child)=> {
 	// DOM 节点
 	if (child instanceof Node){
 		parent.appendChild(child)
+		runMount(child)
 		return
 	}
 
@@ -193,6 +264,7 @@ const appendChild = (parent, child)=> {
 			// 清除之前的节点
 			currentNodes.forEach((node)=> {
 				if (node.parentNode === parent){
+					runCleanup(node)
 					parent.removeChild(node)
 				}
 			})
@@ -214,6 +286,7 @@ const appendChild = (parent, child)=> {
 			currentNodes = [...tempContainer.childNodes]
 			currentNodes.forEach((node)=> {
 				parent.insertBefore(node, placeholder)
+				runMount(node)
 			})
 		})
 	}
@@ -235,7 +308,7 @@ const appendChild = (parent, child)=> {
 }
 
 export {
-	signal, computed, effect, h,
+	signal, computed, effect, h, onMount, onCleanup,
 }
 export const jsx = h
 export const jsxs = h
