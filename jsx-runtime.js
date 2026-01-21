@@ -29,7 +29,6 @@ const runMount = (node)=> {
 		mounts.forEach((fn)=> {
 			try { fn.call(node) } catch(e){ console.error(e) }
 		})
-		node[MOUNT_KEY] = []
 	}
 }
 
@@ -40,7 +39,6 @@ const runCleanup = (node)=> {
 		for (let i = cleanups.length - 1; i >= 0; i--){
 			try { cleanups[i].call(node) } catch(e){ console.error(e) }
 		}
-		node[CLEANUP_KEY] = []
 	}
 
 	// recursively cleanup children
@@ -83,8 +81,14 @@ const h = (tag, props = {}, ...children)=> {
 		currentComponentContext = prev
 
 		if (result instanceof Node){
-			result[MOUNT_KEY] = [...result[MOUNT_KEY] || [], ...context.mounts]
-			result[CLEANUP_KEY] = [...result[CLEANUP_KEY] || [], ...context.cleanups]
+			result[MOUNT_KEY] = result[MOUNT_KEY] || []
+			result[CLEANUP_KEY] = result[CLEANUP_KEY] || []
+			context.mounts.forEach((fn)=> {
+				if (!result[MOUNT_KEY].includes(fn)){ result[MOUNT_KEY].push(fn) }
+			})
+			context.cleanups.forEach((fn)=> {
+				if (!result[CLEANUP_KEY].includes(fn)){ result[CLEANUP_KEY].push(fn) }
+			})
 		}
 
 		return result
@@ -225,7 +229,8 @@ const appendChild = (parent, child)=> {
 	// DOM 节点
 	if (child instanceof Node){
 		parent.appendChild(child)
-		runMount(child)
+		// 仅当父节点已连接到文档时才触发 mount，避免在临时容器中重复触发
+		if (parent.isConnected){ runMount(child) }
 		return
 	}
 
@@ -237,15 +242,39 @@ const appendChild = (parent, child)=> {
 
 	// Signal 或 Computed（响应式值）
 	if (isReactive(child)){
-		// 为文本类型的 signal/computed 创建响应式更新
-		const textNode = document.createTextNode('')
-		parent.appendChild(textNode)
+		// 响应式值可能是文本、DOM 节点、数组或组件返回值等。
+		// 使用占位节点并在值变化时替换其前面的节点集合。
+		const placeholder = document.createComment('reactive')
+		parent.appendChild(placeholder)
+
+		let currentNodes = []
 
 		return effect(()=> {
 			const newValue = getReactiveValue(child)
-			if (newValue != null){
-				textNode.textContent = toString(newValue)
+			// 清除旧节点
+			currentNodes.forEach((node)=> {
+				if (node.parentNode === parent){
+					runCleanup(node)
+					parent.removeChild(node)
+				}
+			})
+			currentNodes = []
+			// 後面的代碼，是否還能繼續加入跟蹤列表
+			if (newValue == null){
+				return
 			}
+
+			const actualValue = isReactive(newValue) ? getReactiveValue(newValue) : newValue
+
+			// 使用临时容器来复用现有的 appendChild 逻辑
+			const tempContainer = document.createElement('div')
+			appendChild(tempContainer, actualValue)
+
+			currentNodes = [...tempContainer.childNodes]
+			currentNodes.forEach((node)=> {
+				parent.insertBefore(node, placeholder)
+				runMount(node)
+			})
 		})
 	}
 
