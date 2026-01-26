@@ -73,6 +73,13 @@ const toString = (value)=> {
  * @returns {Element|*} DOM element or component result
  */
 const h = (tag, props = {}, ...children)=> {
+	// Special handling for <solid_if> conditional blocks
+	if (tag === 'solid_if'){
+		const when = props?.when
+		const allChildren = mergeChildren(props, children)
+		return createConditionalNode(when, allChildren)
+	}
+
 	// 如果是组件函数，直接调用
 	if (typeof tag === 'function'){
 		const prev = currentComponentContext
@@ -337,8 +344,57 @@ const appendChild = (parent, child)=> {
 	parent.appendChild(document.createTextNode(toString(child)))
 }
 
+const createConditionalNode = (when, children)=> {
+	const placeholder = document.createComment('if')
+	let currentNodes = []
+	let stopEffect = null
+
+	const cleanupRendered = ()=> {
+		currentNodes.forEach((node)=> {
+			if (node.parentNode){
+				runCleanup(node)
+				node.parentNode.removeChild(node)
+			}
+		})
+		currentNodes = []
+	}
+
+	const startEffect = ()=> {
+		stopEffect = effect(()=> {
+			const parent = placeholder.parentNode
+			if (!parent){ return }
+
+			cleanupRendered()
+
+			const cond = typeof when === 'function' ? when() : when
+			if (!cond){ return }
+
+			const tempContainer = document.createElement('div')
+			appendChild(tempContainer, children)
+
+			currentNodes = [...tempContainer.childNodes]
+			currentNodes.forEach((node)=> {
+				parent.insertBefore(node, placeholder)
+				runMount(node)
+			})
+		})
+	}
+
+	placeholder[MOUNT_KEY] = placeholder[MOUNT_KEY] || []
+	placeholder[CLEANUP_KEY] = placeholder[CLEANUP_KEY] || []
+
+	placeholder[MOUNT_KEY].push(startEffect)
+	placeholder[CLEANUP_KEY].push(()=> {
+		cleanupRendered()
+		if (stopEffect){ stopEffect() }
+	})
+
+	return placeholder
+}
+
 export {
 	signal, computed, effect, h, onMount, onUnmount,
 }
+
 export const jsx = h
 export const jsxs = h
