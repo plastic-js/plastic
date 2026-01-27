@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test If Component</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        .container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>If Component Test</h1>
+    <div id="app"></div>
+
+    <script type="module">
+        import { signal, h } from './jsx-runtime.js'
+        import If from './components/If.jsx'
+        import Label from './components/Label.jsx'
+
+        const show = signal(true)
+
+        const TestApp = () => {
+            return h('div', { className: 'container' },
+                h('button', {
+                    onClick: () => {
+                        console.log('Button clicked, current value:', show())
+                        show(!show())
+                        console.log('New value:', show())
+                    }
+                }, 'Toggle Label'),
+                h(If, { when: show },
+                    h(Label, { text: 'This label should toggle' })
+                )
+            )
+        }
+
+        document.getElementById('app').appendChild(TestApp())
+    </script>
+</body>
+
+</html>

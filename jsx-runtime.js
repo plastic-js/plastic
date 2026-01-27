@@ -30,6 +30,9 @@ const runMount = (node)=> {
 			try { fn.call(node) } catch(e){ console.error(e) }
 		})
 	}
+
+	// recursively mount children
+	node.childNodes && node.childNodes.forEach(child=> runMount(child))
 }
 
 const runCleanup = (node)=> {
@@ -360,13 +363,15 @@ const createConditionalNode = (when, children)=> {
 	}
 
 	const startEffect = ()=> {
+		if (stopEffect){ return } // 防止重复启动
+
 		stopEffect = effect(()=> {
 			const parent = placeholder.parentNode
 			if (!parent){ return }
 
 			cleanupRendered()
 
-			const cond = typeof when === 'function' ? when() : when
+			const cond = getReactiveValue(when)
 			if (!cond){ return }
 
 			const tempContainer = document.createElement('div')
@@ -383,7 +388,9 @@ const createConditionalNode = (when, children)=> {
 	placeholder[MOUNT_KEY] = placeholder[MOUNT_KEY] || []
 	placeholder[CLEANUP_KEY] = placeholder[CLEANUP_KEY] || []
 
+	// 在 mount 时启动 effect
 	placeholder[MOUNT_KEY].push(startEffect)
+
 	placeholder[CLEANUP_KEY].push(()=> {
 		cleanupRendered()
 		if (stopEffect){ stopEffect() }
@@ -393,7 +400,7 @@ const createConditionalNode = (when, children)=> {
 }
 
 export {
-	signal, computed, effect, h, onMount, onUnmount,
+	signal, computed, effect, h, onMount, onUnmount, runMount,
 }
 
 export const jsx = h
