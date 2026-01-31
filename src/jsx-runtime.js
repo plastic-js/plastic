@@ -25,45 +25,45 @@ const allowedEvents = new Set([
 ])
 
 const h = (tag, props = {}, ...children)=> {
-	if (typeof tag !== 'string'){
-		return null
-	}
 	// 讀取普通的html tag 比如 'div', 'span'
-	const element = document.createElement(tag)
+	if (typeof tag === 'string'){
+		const element = document.createElement(tag)
 
-	for (const [key, value] of Object.entries(props)){
-		if (key === 'children'){
-			let childrenFromProps = value
-			if (!Array.isArray(value)){
-				childrenFromProps = [value]
-			}
-			for (const child of childrenFromProps){
-				if (typeof child === 'string'){
-					const textNode = document.createTextNode(child)
-					element.appendChild(textNode)
-					continue
+		for (const [key, value] of Object.entries(props)){
+			if (key === 'children'){
+				let childrenFromProps = value
+				if (!Array.isArray(value)){
+					childrenFromProps = [value]
 				}
-				if (child instanceof HTMLElement){
-					element.appendChild(child)
-				}
-			}
-			continue
-		}
-		if (key.startsWith('on')){
-			const eventName = key.slice(2)
-			if(eventName){
-				if(eventName[0] === eventName[0].toUpperCase()){
-					if (allowedEvents.has(eventName.toLowerCase())){
-						const eventType = eventName.toLowerCase()
-						// in the future, we need to remove the listeners when unmounting
-						element.addEventListener(eventType, value)
+				for (const child of childrenFromProps){
+					if (typeof child === 'string'){
+						const textNode = document.createTextNode(child)
+						element.appendChild(textNode)
+						continue
 					}
-					continue
+					if (child instanceof HTMLElement){
+						element.appendChild(child)
+						continue
+					}
+				}
+				continue
+			}
+			if (key.startsWith('on')){
+				const eventName = key.slice(2)
+				if(eventName){
+					if(eventName[0] === eventName[0].toUpperCase()){
+						if (allowedEvents.has(eventName.toLowerCase())){
+							const eventType = eventName.toLowerCase()
+							// in the future, we need to remove the listeners when unmounting
+							element.addEventListener(eventType, value)
+						}
+						continue
+					}
 				}
 			}
 		}
+		return element
 	}
-	return element
 }
 
 const runMount = (element)=> {}
