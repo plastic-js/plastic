@@ -1,6 +1,6 @@
-import { computed, runMount, signal } from './jsx-runtime.js'
-import Label from './components/Label.jsx'
-import If from './components/If.jsx'
+import { computed, runMount, signal } from '../jsx-runtime.js'
+import Label from '../components/Label.jsx'
+import If from '../components/If.jsx'
 import './global.css'
 
 // 创建响应式状态
@@ -19,6 +19,7 @@ const App = ()=> {
 		<div className='container'>
 			{/* // 永遠不會切換，沒關係。就用這種效果，因為我們不反對tenary這種語法 */}
 			{ showLabel && <Label text='This is a label component--foo' /> }
+			<div />
 			<If when={showLabel}>
 				<Label text='This is a label component--bar' />
 			</If>

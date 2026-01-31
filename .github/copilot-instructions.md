@@ -5,6 +5,7 @@
 - **Function Definitions**: Always prefer **arrow functions** (`const myFunc = () => {}`) over traditional `function` declarations.
 - **Asynchronous Patterns**: 
     - Prefer using **Promises** with `.then()` and `.catch()` chains rather than `async/await` syntax. 
+    - For test case files (e.g., files in `spec/` and `*.spec.mjs`), it is not necessary to follow the above; `async/await` may be used as needed.
     - Avoid `await` unless specifically required by the context or a library's constraints.
 
 ## Platform Specifics & Environment
