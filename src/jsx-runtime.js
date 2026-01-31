@@ -3,7 +3,8 @@ import {
 } from 'alien-signals'
 
 const isReactive = value=> isSignal(value) || isComputed(value)
-
+const pendingEffects = []
+// let currentComponentContext = null
 const allowedEvents = new Set([
 	'click',
 	'dblclick',
@@ -95,13 +96,22 @@ const h = (tag, props = {}, ...children)=> {
 	}
 }
 
-const runMount = (element)=> {}
-const runUnmount = (element)=> {}
 const runCleanup = (element)=> {}
-const onMount = (callback)=> {}
+const onMount = (fn)=> {
+	// currentComponentContext.mounts.push(fn)
+	pendingEffects.push(fn)
+}
 const onUnmount = (callback)=> {}
+const renderApp = (rootElement, appElement)=> {
+	rootElement.appendChild(appElement)
+	// 倒序執行 mount 回調
+	while (pendingEffects.length){
+		const effectFn = pendingEffects.pop()
+		effectFn()
+	}
+}
 export {
-	signal, computed, effect, h, runCleanup, runMount, runUnmount, onMount, onUnmount,
+	signal, computed, effect, h, runCleanup, onMount, onUnmount, renderApp,
 }
 
 export const jsx = h
