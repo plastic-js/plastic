@@ -4,6 +4,26 @@ import {
 
 // const isReactive = value=> isSignal(value) || isComputed(value)
 
+const allowedEvents = new Set([
+	'click',
+	'dblclick',
+	'mousedown',
+	'mouseup',
+	'mouseover',
+	'mouseout',
+	'mousemove',
+	'mouseenter',
+	'mouseleave',
+	'keydown',
+	'keyup',
+	'keypress',
+	'input',
+	'change',
+	'submit',
+	'focus',
+	'blur',
+])
+
 const h = (tag, props = {}, ...children)=> {
 	if (typeof tag !== 'string'){
 		return null
@@ -20,6 +40,20 @@ const h = (tag, props = {}, ...children)=> {
 			}
 			if (value instanceof HTMLElement){
 				element.appendChild(value)
+			}
+			continue
+		}
+		if (key.startsWith('on')){
+			const eventName = key.slice(2)
+			if(eventName){
+				if(eventName[0] === eventName[0].toUpperCase()){
+					if (allowedEvents.has(eventName.toLowerCase())){
+						const eventType = eventName.toLowerCase()
+						// in the future, we need to remove the listeners when unmounting
+						element.addEventListener(eventType, value)
+					}
+					continue
+				}
 			}
 		}
 	}
