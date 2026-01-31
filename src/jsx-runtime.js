@@ -25,7 +25,6 @@ const allowedEvents = new Set([
 ])
 
 const h = (tag, props = {}, ...children)=> {
-	// 讀取普通的html tag 比如 'div', 'span'
 	if (typeof tag === 'string'){
 		const element = document.createElement(tag)
 
@@ -39,6 +38,20 @@ const h = (tag, props = {}, ...children)=> {
 					if (typeof child === 'string'){
 						const textNode = document.createTextNode(child)
 						element.appendChild(textNode)
+						continue
+					}
+					// // Signal as a function 
+					if (isSignal(child) || isComputed(child)){
+						const childValue = child()
+						// text node
+						if (typeof childValue === 'string' || typeof childValue === 'number'){
+							const textNode = document.createTextNode(childValue)
+							element.appendChild(textNode)
+							effect(()=> {
+								textNode.textContent = child()
+							})
+						}
+						// HTMLElement,先不處理
 						continue
 					}
 					if (child instanceof HTMLElement){
