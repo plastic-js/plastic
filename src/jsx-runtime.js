@@ -4,7 +4,7 @@ import {
 
 const isReactive = value=> isSignal(value) || isComputed(value)
 const pendingEffects = []
-// let currentComponentContext = null
+let currentComponentContext = null
 const allowedEvents = new Set([
 	'click',
 	'dblclick',
@@ -60,7 +60,8 @@ const h = (tag, props = {}, ...children)=> {
 						// HTMLElement,先不處理
 						continue
 					}
-					if (child instanceof HTMLElement){
+					// style node?
+					if (child instanceof HTMLElement || child instanceof Text || child instanceof Comment){
 						element.appendChild(child)
 						continue
 					}
@@ -91,17 +92,33 @@ const h = (tag, props = {}, ...children)=> {
 	}
 	// function components
 	if (typeof tag === 'function'){
+		const prev = currentComponentContext
+		currentComponentContext = {
+			mounts: [],
+			unmounts: [],
+		}
 		const componentElement = tag({ ...props, children })
+		currentComponentContext = prev
 		return componentElement
 	}
 }
 
-const runCleanup = (element)=> {}
+const runCleanup = (element)=> {
+	if (currentComponentContext){
+		for (const unmount of currentComponentContext.unmounts){
+			unmount()
+		}
+	}
+}
 const onMount = (fn)=> {
 	// currentComponentContext.mounts.push(fn)
 	pendingEffects.push(fn)
 }
-const onUnmount = (callback)=> {}
+const onUnmount = (fn)=> {
+	if (currentComponentContext){
+		currentComponentContext.unmounts.push(fn)
+	}
+}
 const renderApp = (rootElement, appElement)=> {
 	rootElement.appendChild(appElement)
 	// 倒序執行 mount 回調
