@@ -14,3 +14,7 @@
 
 ## Project Context
 - Ensure all generated code snippets follow these rules to maintain consistency across the codebase.
+
+## This Project
+- This project is focused on implementing a custom JSX runtime, as that it form a front-end framework. The principles of the framework are similar to Solid.js.
+- While developing code for this project, always help me with functionality implementation, bug fixing, and performance optimization by referencing Solid.js and other similar frameworks.
