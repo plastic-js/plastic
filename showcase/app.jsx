@@ -1,6 +1,6 @@
-import { computed, runMount, signal } from '../jsx-runtime.js'
-import Label from '../components/Label.jsx'
-import If from '../components/If.jsx'
+import { computed, runMount, signal } from '../src/jsx-runtime.js'
+import Label from '../showcase/components/Label.jsx'
+import If from '../src/If.jsx'
 import './global.css'
 
 // 创建响应式状态

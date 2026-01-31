@@ -20,7 +20,7 @@ export default defineConfig({
 	],
 	resolve: {
 		alias: {
-			'jsx/jsx-runtime': path.resolve(__dirname, './jsx-runtime.js'),
+			'jsx/jsx-runtime': path.resolve(__dirname, './src/jsx-runtime.js'),
 		},
 	},
 	build: {
