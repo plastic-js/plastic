@@ -13,11 +13,12 @@ const level = computed(()=> {
 const App = ()=> {
 	const showLabel = signal(true)
 	const handleClick = ()=> {
+		window.alert(22)
 		showLabel(!showLabel())
 	}
 	return (
 		<div className='container'>
-			<span>2222</span>
+			<span onClick={handleClick}>2222</span>
 		</div>
 
 	)
