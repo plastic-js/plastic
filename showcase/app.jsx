@@ -1,4 +1,4 @@
-import { computed, runMount, signal } from '../src/jsx-runtime.js'
+import { computed, onMount, renderApp, signal } from '../src/jsx-runtime.js'
 import Label from '../showcase/components/Label.jsx'
 // import If from '../src/If.jsx'
 import './global.css'
@@ -28,7 +28,4 @@ const App = ()=> {
 	)
 }
 // 渲染到DOM
-const appElement = App()
-document.body.appendChild(appElement)
-// 触发 mount 事件以启动响应式效果
-// runMount(appElement)
+renderApp(document.body, <App />)
