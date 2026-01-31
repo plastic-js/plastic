@@ -33,13 +33,19 @@ const h = (tag, props = {}, ...children)=> {
 
 	for (const [key, value] of Object.entries(props)){
 		if (key === 'children'){
-			if (typeof value === 'string'){
-				const textNode = document.createTextNode(value)
-				element.appendChild(textNode)
-				continue
+			let childrenFromProps = value
+			if (!Array.isArray(value)){
+				childrenFromProps = [value]
 			}
-			if (value instanceof HTMLElement){
-				element.appendChild(value)
+			for (const child of childrenFromProps){
+				if (typeof child === 'string'){
+					const textNode = document.createTextNode(child)
+					element.appendChild(textNode)
+					continue
+				}
+				if (child instanceof HTMLElement){
+					element.appendChild(child)
+				}
 			}
 			continue
 		}
@@ -63,8 +69,10 @@ const h = (tag, props = {}, ...children)=> {
 const runMount = (element)=> {}
 const runUnmount = (element)=> {}
 const runCleanup = (element)=> {}
+const onMount = (callback)=> {}
+const onUnmount = (callback)=> {}
 export {
-	signal, computed, effect, h, runCleanup, runMount, runUnmount,
+	signal, computed, effect, h, runCleanup, runMount, runUnmount, onMount, onUnmount,
 }
 
 export const jsx = h
