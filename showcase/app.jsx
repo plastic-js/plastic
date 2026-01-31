@@ -1,5 +1,5 @@
 import { computed, runMount, signal } from '../src/jsx-runtime.js'
-// import Label from '../showcase/components/Label.jsx'
+import Label from '../showcase/components/Label.jsx'
 // import If from '../src/If.jsx'
 import './global.css'
 
@@ -13,12 +13,16 @@ const level = computed(()=> {
 const App = ()=> {
 	const showLabel = signal(true)
 	const handleClick = ()=> {
-		window.alert(22)
 		showLabel(!showLabel())
+		count(count() + 1)
 	}
 	return (
 		<div className='container'>
 			<span onClick={handleClick}>2222</span>
+			<p>
+				{count }
+			</p>
+			<Label text={level} />
 		</div>
 
 	)

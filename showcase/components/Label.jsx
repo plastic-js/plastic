@@ -1,4 +1,3 @@
-// let's test the onMount lifecycle method
 import { onMount, onUnmount } from '../../src/jsx-runtime.js'
 
 const Label = (props)=> {
