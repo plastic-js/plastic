@@ -64,6 +64,11 @@ const h = (tag, props = {}, ...children)=> {
 		}
 		return element
 	}
+	// function components
+	if (typeof tag === 'function'){
+		const componentElement = tag({ ...props, children })
+		return componentElement
+	}
 }
 
 const runMount = (element)=> {}
