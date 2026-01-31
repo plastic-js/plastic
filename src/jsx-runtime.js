@@ -2,7 +2,7 @@ import {
 	computed, effect, isComputed, isSignal, signal,
 } from 'alien-signals'
 
-// const isReactive = value=> isSignal(value) || isComputed(value)
+const isReactive = value=> isSignal(value) || isComputed(value)
 
 const allowedEvents = new Set([
 	'click',
@@ -41,7 +41,7 @@ const h = (tag, props = {}, ...children)=> {
 						continue
 					}
 					// // Signal as a function 
-					if (isSignal(child) || isComputed(child)){
+					if (isReactive(child)){
 						const childValue = child()
 						// text node
 						if (typeof childValue === 'string' || typeof childValue === 'number'){
