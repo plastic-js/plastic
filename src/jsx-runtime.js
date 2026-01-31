@@ -24,6 +24,11 @@ const allowedEvents = new Set([
 	'blur',
 ])
 
+const allowedLifecycleEvents = new Set([
+	'mount',
+	'unmount',
+])
+
 const h = (tag, props = {}, ...children)=> {
 	if (typeof tag === 'string'){
 		const element = document.createElement(tag)
@@ -63,15 +68,21 @@ const h = (tag, props = {}, ...children)=> {
 			}
 			if (key.startsWith('on')){
 				const eventName = key.slice(2)
-				if(eventName){
-					if(eventName[0] === eventName[0].toUpperCase()){
-						if (allowedEvents.has(eventName.toLowerCase())){
-							const eventType = eventName.toLowerCase()
-							// in the future, we need to remove the listeners when unmounting
-							element.addEventListener(eventType, value)
-						}
-						continue
-					}
+				if(!eventName){
+					continue
+				}
+				if(eventName[0] !== eventName[0].toUpperCase()){
+					continue
+				}
+				if (allowedEvents.has(eventName.toLowerCase())){
+					const eventType = eventName.toLowerCase()
+					// in the future, we need to remove the listeners when unmounting
+					element.addEventListener(eventType, value)
+					continue
+				}
+				if (allowedLifecycleEvents.has(eventName.toLowerCase())){
+					// handle lifecycle events later
+					continue
 				}
 			}
 		}
