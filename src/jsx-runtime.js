@@ -97,7 +97,7 @@ const h = (tag, props = {}, ...children)=> {
 			mounts: [],
 			unmounts: [],
 		}
-		const componentElement = tag({ ...props, children })
+		const componentElement = tag({ ...props })
 		currentComponentContext = prev
 		return componentElement
 	}
