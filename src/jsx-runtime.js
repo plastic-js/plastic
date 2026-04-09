@@ -30,6 +30,21 @@ const allowedLifecycleEvents = new Set([
 	'unmount',
 ])
 
+const node2Element = (node)=> {
+	if (node === null || node === undefined){
+		console.error('null node', 1)
+		return document.createComment('null')
+	}
+	if (typeof node === 'string' || typeof node === 'number'){
+		return document.createTextNode(node)
+	}
+	if (node instanceof HTMLElement || node instanceof Text || node instanceof Comment){
+		return node
+	}
+	console.error('暫不處理', 2)
+	return document.createComment('null')
+}
+
 const h = (tag, props = {}, ...children)=> {
 	if (typeof tag === 'string'){
 		const element = document.createElement(tag)
@@ -41,12 +56,7 @@ const h = (tag, props = {}, ...children)=> {
 					childrenFromProps = [value]
 				}
 				for (const child of childrenFromProps){
-					if (typeof child === 'string'){
-						const textNode = document.createTextNode(child)
-						element.appendChild(textNode)
-						continue
-					}
-					// // Signal as a function 
+					// Signal as a function 
 					if (isReactive(child)){
 						const childValue = child()
 						// text node
@@ -60,9 +70,22 @@ const h = (tag, props = {}, ...children)=> {
 						// HTMLElement,先不處理
 						continue
 					}
-					// style node?
-					if (child instanceof HTMLElement || child instanceof Text || child instanceof Comment){
-						element.appendChild(child)
+					// normal node
+					const result = node2Element(child)
+					element.appendChild(result)
+
+					// array from <> </> fragments, or from If component
+					if (Array.isArray(child)){
+						for (const nestedChild of child){
+							let arr = nestedChild
+							if (!Array.isArray(nestedChild)){
+								arr = [nestedChild]
+							}
+							for (const deepChild of arr){
+								const deepChildElement = node2Element(deepChild)
+								element.appendChild(deepChildElement)
+							}
+						}
 						continue
 					}
 				}
@@ -99,6 +122,60 @@ const h = (tag, props = {}, ...children)=> {
 		}
 		const componentElement = tag({ ...props })
 		currentComponentContext = prev
+
+		// Handle computed/signal values from components (e.g., If component)
+		if (isReactive(componentElement)){
+			// 第一步，生成兩個comment節點
+			// 第二步，計算出comment之間的部分
+			// 第三步，effect（本來應該異步，但是現在只有同步API），判斷是否已經加入到父節點，然後再更新comment之間的內容
+			// comment和中間的內容，作為一個數組，一起被return 
+			// debugger
+			const id = Date.now()
+			const anchorStart = document.createComment('computed-anchor-start' + id)
+			const anchorEnd = document.createComment('computed-anchor-end' + id)
+
+			const figureoutRealElement = (value)=> {
+				if (!Array.isArray(value)){
+					return [node2Element(value)]
+				}
+				return value.map((item)=> {
+					return node2Element(item)
+				})
+			}
+
+			const updateRealPart = (value)=> {
+				if (!anchorEnd.parentNode){
+					// wait for the two anchors to be inserted
+					return null
+				}
+				// remove all nodes between the two anchors
+				let node = anchorStart.nextSibling
+				while (node && node !== anchorEnd){
+					const nextNode = node.nextSibling
+					node.remove()
+					node = nextNode
+				}
+
+				const nodesToInsert = figureoutRealElement(value)
+				// 封裝一個函數，直接插入數組到DOM
+				for (const node of nodesToInsert){
+					anchorEnd.parentNode?.insertBefore(node, anchorEnd)
+				}
+			}
+
+			// renderValue(componentElement())
+			effect(()=> {
+				console.log(222222, componentElement())
+				updateRealPart(componentElement())
+			})
+			debugger
+			return [
+				anchorStart,
+				...figureoutRealElement(componentElement()),
+				anchorEnd,
+			]
+		}
+
 		return componentElement
 	}
 }
