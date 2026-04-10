@@ -8,9 +8,29 @@ const isReactive = value=> isSignal(value) || isComputed(value)
 const createPlaceholder = ()=> document.createComment('null')
 const flattenChildren = children=> children.flat(Infinity)
 
+const applyStyleObject = (element, styles)=> {
+	Object.entries(styles).forEach(([property, value])=> {
+		if (value == null || value === false){
+			return
+		}
+
+		if (property.startsWith('--')){
+			element.style.setProperty(property, String(value))
+			return
+		}
+
+		element.style[property] = value
+	})
+}
+
 // Apply props that can be resolved immediately without subscribing to reactive values.
 const setStaticProp = (element, key, value)=> {
 	if (value == null || value === false){
+		return
+	}
+
+	if (key === 'style' && value && typeof value === 'object'){
+		applyStyleObject(element, value)
 		return
 	}
 

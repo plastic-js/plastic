@@ -10,7 +10,12 @@ const app = (
 		<p>Static text children render in order.</p>
 		<p>Event binding demo removed.</p>
 		<div
-			className='parent' style='border: 1px solid black; padding: 8px; margin-top: 8px;'
+			className='parent'
+			style={{
+				border: '1px solid black',
+				padding: '8px',
+				marginTop: '8px',
+			}}
 		>
 			<div>div.firstchild</div>
 			<div>div.secondchild</div>

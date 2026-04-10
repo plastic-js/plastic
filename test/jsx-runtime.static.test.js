@@ -34,10 +34,18 @@ describe('jsx runtime static rendering', ()=> {
 		applyStaticProps(element, {
 			htmlFor: 'field-id',
 			className: 'field-label',
+			style: {
+				backgroundColor: 'black',
+				paddingInline: '12px',
+				'--accent-color': '#f40',
+			},
 		})
 
 		expect(element.getAttribute('for')).toBe('field-id')
 		expect(element.className).toBe('field-label')
+		expect(element.style.backgroundColor).toBe('black')
+		expect(element.style.paddingInline).toBe('12px')
+		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
 	})
 
 	it('appends string, number and nested DOM children', ()=> {
@@ -68,11 +76,15 @@ describe('jsx runtime static rendering', ()=> {
 	it('routes jsx automatic runtime calls through h', ()=> {
 		const element = jsx('section', {
 			className: 'panel',
+			style: {
+				borderTop: '2px solid teal',
+			},
 			children: 'content',
 		})
 
 		expect(element.tagName).toBe('SECTION')
 		expect(element.className).toBe('panel')
+		expect(element.style.borderTop).toBe('2px solid teal')
 		expect(element.textContent).toBe('content')
 	})
 
