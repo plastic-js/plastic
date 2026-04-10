@@ -11,6 +11,23 @@ const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
 const isClassProp = key=> key === 'class' || key === 'className'
+const normalizeTextNodeValue = (value)=> {
+	if (value == null || typeof value === 'boolean'){
+		return ''
+	}
+
+	return String(value)
+}
+
+const createReactiveTextNode = (reactiveValue)=> {
+	const textNode = document.createTextNode('')
+
+	effect(()=> {
+		textNode.data = normalizeTextNodeValue(reactiveValue())
+	})
+
+	return textNode
+}
 
 const addClassTokens = (element, value)=> {
 	if (typeof value !== 'string'){
@@ -118,6 +135,9 @@ const node2Element = (node)=> {
 	if (node === null || node === undefined){
 		console.error('null node', 1)
 		return createPlaceholder()
+	}
+	if (isReactive(node)){
+		return createReactiveTextNode(node)
 	}
 	if (typeof node === 'string' || typeof node === 'number'){
 		return document.createTextNode(String(node))

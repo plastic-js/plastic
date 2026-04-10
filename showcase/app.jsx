@@ -1,24 +1,32 @@
 import {
+	computed,
 	renderApp,
+	signal,
 } from '../src/jsx-runtime.js'
 import './global.css'
 
-let clickCount = 0
-const counterLabel = document.createElement('p')
-counterLabel.textContent = `Button clicked: ${clickCount} times`
+const reactiveCount = signal(0)
+const reactiveLabel = computed(()=> `Signal count: ${reactiveCount()}`)
+const reactiveDouble = computed(()=> `Double count: ${reactiveCount() * 2}`)
 
-const handleClick = ()=> {
-	clickCount += 1
-	counterLabel.textContent = `Button clicked: ${clickCount} times`
+const handleReactiveClick = ()=> {
+	reactiveCount(reactiveCount() + 1)
 }
 
 const app = (
 	<div className='container'>
 		<h1>JSX Runtime Showcase</h1>
-		<span>Static element rendering works.</span>
-		<p>Static text children render in order.</p>
-		<p>Event binding with onClick works.</p>
-		<button onClick={handleClick} type='button'>Click me</button>
+		<section className='feature-card'>
+			<h2>Reactive text nodes</h2>
+			<p>These text children are signals, so the same Text nodes update in place.</p>
+			<p>
+				{reactiveLabel}
+			</p>
+			<p>
+				{reactiveDouble}
+			</p>
+			<button onClick={handleReactiveClick} type='button'>Update reactive text</button>
+		</section>
 		<section className='feature-card'>
 			<h2>Boolean attributes</h2>
 			<p>Props like disabled and checked now map to real DOM boolean attributes.</p>
@@ -34,18 +42,6 @@ const app = (
 				</label>
 			</div>
 		</section>
-		<div
-			className='parent'
-			style={{
-				border: '1px solid black',
-				padding: '8px',
-				marginTop: '8px',
-			}}
-		>
-			<div>div.firstchild</div>
-			<div>div.secondchild</div>
-		</div>
-		{counterLabel}
 	</div>
 )
 

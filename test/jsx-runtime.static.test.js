@@ -7,8 +7,10 @@ import {
 	appendChild,
 	appendChildren,
 	applyStaticProps,
+	computed,
 	h,
 	jsx,
+	signal,
 } from '../src/jsx-runtime.js'
 
 describe('jsx runtime static rendering', ()=> {
@@ -170,6 +172,47 @@ describe('jsx runtime static rendering', ()=> {
 
 		expect(element.childNodes).toHaveLength(3)
 		expect(element.textContent).toBe('head1tail')
+	})
+
+	it('updates text nodes when a signal child changes', ()=> {
+		const count = signal(1)
+		const element = h('p', null, 'Count: ', count)
+
+		expect(element.textContent).toBe('Count: 1')
+		expect(element.childNodes).toHaveLength(2)
+		expect(element.childNodes[1].nodeType).toBe(Node.TEXT_NODE)
+
+		count(2)
+
+		expect(element.textContent).toBe('Count: 2')
+	})
+
+	it('updates text nodes when a computed child changes', ()=> {
+		const firstName = signal('Ada')
+		const label = computed(()=> `Hello ${firstName()}`)
+		const element = h('p', null, label)
+
+		expect(element.textContent).toBe('Hello Ada')
+
+		firstName('Lin')
+
+		expect(element.textContent).toBe('Hello Lin')
+	})
+
+	it('renders reactive nullish and boolean values as empty text', ()=> {
+		const value = signal('ready')
+		const element = h('p', null, value)
+
+		expect(element.textContent).toBe('ready')
+
+		value(null)
+		expect(element.textContent).toBe('')
+
+		value(false)
+		expect(element.textContent).toBe('')
+
+		value(0)
+		expect(element.textContent).toBe('0')
 	})
 
 	it('routes jsx automatic runtime calls through h', ()=> {
