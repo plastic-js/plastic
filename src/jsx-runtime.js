@@ -10,6 +10,35 @@ const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
+const isClassProp = key=> key === 'class' || key === 'className'
+
+const addClassTokens = (element, value)=> {
+	if (typeof value !== 'string'){
+		return
+	}
+
+	const tokens = value
+		.split(/\s+/)
+		.filter(Boolean)
+
+	element.classList.add(...tokens)
+}
+
+const applyStaticClasses = (element, props)=> {
+	[props.class, props.className].forEach((value)=> {
+		addClassTokens(element, value)
+	})
+
+	if (!props.classList || typeof props.classList !== 'object'){
+		return
+	}
+
+	Object.entries(props.classList).forEach(([className, enabled])=> {
+		if (enabled){
+			element.classList.add(className)
+		}
+	})
+}
 
 const applyStyleObject = (element, styles)=> {
 	Object.entries(styles).forEach(([property, value])=> {
@@ -28,6 +57,10 @@ const applyStyleObject = (element, styles)=> {
 
 // Apply props that can be resolved immediately without subscribing to reactive values.
 const setStaticProp = (element, key, value)=> {
+	if (key === 'classList' || isClassProp(key)){
+		return
+	}
+
 	if (isEventProp(key)){
 		if (typeof value === 'function'){
 			const eventName = key.slice(2).toLowerCase()
@@ -68,6 +101,8 @@ const setStaticProp = (element, key, value)=> {
 }
 
 const applyStaticProps = (element, props = {})=> {
+	applyStaticClasses(element, props)
+
 	// Reactive props are skipped here because they need a separate update strategy.
 	Object.entries(props).forEach(([key, value])=> {
 		if (key === 'children' || isReactive(value)){

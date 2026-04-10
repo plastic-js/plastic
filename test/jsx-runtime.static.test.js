@@ -48,6 +48,40 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
 	})
 
+	it('merges static class, className and classList props on created elements', ()=> {
+		const element = h('div', {
+			class: 'btn primary',
+			className: 'card',
+			classList: {
+				active: true,
+				disabled: false,
+				accent: 1,
+			},
+		})
+
+		expect(element.classList.contains('btn')).toBe(true)
+		expect(element.classList.contains('primary')).toBe(true)
+		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('accent')).toBe(true)
+		expect(element.classList.contains('disabled')).toBe(false)
+	})
+
+	it('merges classList with static classes regardless of prop order', ()=> {
+		const element = document.createElement('div')
+		applyStaticProps(element, {
+			classList: {
+				selected: true,
+			},
+			className: 'panel',
+			class: 'raised',
+		})
+
+		expect(element.classList.contains('selected')).toBe(true)
+		expect(element.classList.contains('panel')).toBe(true)
+		expect(element.classList.contains('raised')).toBe(true)
+	})
+
 	it('supports boolean attributes on created elements', ()=> {
 		const button = h('button', {
 			disabled: true,
