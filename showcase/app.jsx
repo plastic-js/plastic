@@ -19,6 +19,21 @@ const app = (
 		<p>Static text children render in order.</p>
 		<p>Event binding with onClick works.</p>
 		<button onClick={handleClick} type='button'>Click me</button>
+		<section className='feature-card'>
+			<h2>Boolean attributes</h2>
+			<p>Props like disabled and checked now map to real DOM boolean attributes.</p>
+			<div className='boolean-demo'>
+				<button disabled type='button'>Disabled button</button>
+				<label className='checkbox-row'>
+					<input checked readOnly type='checkbox' />
+					<span>Checked checkbox</span>
+				</label>
+				<label className='checkbox-row'>
+					<input type='checkbox' />
+					<span>Unchecked checkbox</span>
+				</label>
+			</div>
+		</section>
 		<div
 			className='parent'
 			style={{

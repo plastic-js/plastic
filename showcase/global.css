@@ -30,6 +30,12 @@ h1 {
     font-size: 28px;
 }
 
+h2 {
+    color: #333;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
 .counter {
     background: #f8f9fa;
     border-radius: 8px;
@@ -81,6 +87,51 @@ button:hover {
 
 button:active {
     transform: translateY(0);
+}
+
+button:disabled {
+    background: #a7b0d8;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+button:disabled:hover {
+    background: #a7b0d8;
+    transform: none;
+    box-shadow: none;
+}
+
+.feature-card {
+    margin-top: 24px;
+    padding: 18px;
+    background: #f7f8ff;
+    border: 1px solid #dde2ff;
+    border-radius: 10px;
+}
+
+.feature-card p {
+    color: #555;
+    line-height: 1.6;
+}
+
+.boolean-demo {
+    display: grid;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #333;
+    font-size: 15px;
+}
+
+.checkbox-row input {
+    width: 16px;
+    height: 16px;
 }
 
 .info {

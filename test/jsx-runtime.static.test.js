@@ -48,6 +48,40 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
 	})
 
+	it('supports boolean attributes on created elements', ()=> {
+		const button = h('button', {
+			disabled: true,
+		}, 'Tap')
+		const input = h('input', {
+			type: 'checkbox',
+			checked: true,
+		})
+
+		expect(button.disabled).toBe(true)
+		expect(button.getAttribute('disabled')).toBe('')
+		expect(input.checked).toBe(true)
+		expect(input.getAttribute('checked')).toBe('')
+	})
+
+	it('clears boolean attributes when false is provided', ()=> {
+		const input = document.createElement('input')
+		input.type = 'checkbox'
+		input.checked = true
+		input.setAttribute('checked', '')
+		input.disabled = true
+		input.setAttribute('disabled', '')
+
+		applyStaticProps(input, {
+			checked: false,
+			disabled: false,
+		})
+
+		expect(input.checked).toBe(false)
+		expect(input.disabled).toBe(false)
+		expect(input.hasAttribute('checked')).toBe(false)
+		expect(input.hasAttribute('disabled')).toBe(false)
+	})
+
 	it('binds event handlers from onXxx props', ()=> {
 		const onClick = vi.fn()
 		const button = h('button', {

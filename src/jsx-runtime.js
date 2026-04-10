@@ -9,6 +9,7 @@ const createPlaceholder = ()=> document.createComment('null')
 const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
+const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
 
 const applyStyleObject = (element, styles)=> {
 	Object.entries(styles).forEach(([property, value])=> {
@@ -27,10 +28,6 @@ const applyStyleObject = (element, styles)=> {
 
 // Apply props that can be resolved immediately without subscribing to reactive values.
 const setStaticProp = (element, key, value)=> {
-	if (value == null || value === false){
-		return
-	}
-
 	if (isEventProp(key)){
 		if (typeof value === 'function'){
 			const eventName = key.slice(2).toLowerCase()
@@ -43,6 +40,22 @@ const setStaticProp = (element, key, value)=> {
 
 	if (key === 'style' && value && typeof value === 'object'){
 		applyStyleObject(element, value)
+		return
+	}
+
+	if (isBooleanDomProp(element, key)){
+		element[key] = Boolean(value)
+
+		if (value){
+			element.setAttribute(key, '')
+			return
+		}
+
+		element.removeAttribute(key)
+		return
+	}
+
+	if (value == null || value === false){
 		return
 	}
 
