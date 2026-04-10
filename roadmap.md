@@ -1,8 +1,8 @@
 ## [ ] Static Element Creation
-- [ ] Support standard HTML tags.
-- [ ] Support nested children.
-- [ ] Support style object attributes.
-- [ ] Support event binding via onXxx attributes.
+- [X] Support standard HTML tags.
+- [X] Support nested children.
+- [X] Support style object attributes.
+- [X] Support event binding via onXxx attributes.
 - [ ] Support SVG
 - [ ] Support boolean attributes (e.g., disabled, checked).
 - [ ] Support conditional classes via className attribute (e.g., className={isActive ? 'active' : ''}).
