@@ -4,7 +4,7 @@
 - [X] Support style object attributes.
 - [X] Support event binding via onXxx attributes.
 - [ ] Support SVG
-- [ ] Support boolean attributes (e.g., disabled, checked).
+- [X] Support boolean attributes (e.g., disabled, checked).
 - [ ] Support conditional classes via className attribute (e.g., className={isActive ? 'active' : ''}).
 - [ ] Support class merging for static and dynamic classes (e.g., class="btn" and classList={{ active: isTrue }} should coexist without overwriting each other).
 
