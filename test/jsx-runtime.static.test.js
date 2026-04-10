@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import {
-	afterEach, describe, expect, it,
+	afterEach, describe, expect, it, vi,
 } from 'vitest'
 import {
 	appendChild,
@@ -46,6 +46,37 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.backgroundColor).toBe('black')
 		expect(element.style.paddingInline).toBe('12px')
 		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
+	})
+
+	it('binds event handlers from onXxx props', ()=> {
+		const onClick = vi.fn()
+		const button = h('button', {
+			onClick,
+		}, 'Tap')
+
+		button.click()
+
+		expect(onClick).toHaveBeenCalledTimes(1)
+		expect(button.getAttribute('onClick')).toBeNull()
+	})
+
+	it('ignores non-function event prop values', ()=> {
+		const button = h('button', {
+			onClick: 'invalid',
+		}, 'Tap')
+
+		expect(button.getAttribute('onClick')).toBeNull()
+	})
+
+	it('ignores unsupported event names', ()=> {
+		const onInvalid = vi.fn()
+		const button = h('button', {
+			onDefinitelyNotARealEvent: onInvalid,
+		}, 'Tap')
+
+		button.dispatchEvent(new Event('definitelynotarealevent'))
+
+		expect(onInvalid).not.toHaveBeenCalled()
 	})
 
 	it('appends string, number and nested DOM children', ()=> {

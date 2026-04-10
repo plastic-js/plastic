@@ -7,6 +7,8 @@ const Fragment = Symbol('Fragment')
 const isReactive = value=> isSignal(value) || isComputed(value)
 const createPlaceholder = ()=> document.createComment('null')
 const flattenChildren = children=> children.flat(Infinity)
+const isEventProp = key=> (/^on[A-Za-z]/).test(key)
+const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 
 const applyStyleObject = (element, styles)=> {
 	Object.entries(styles).forEach(([property, value])=> {
@@ -26,6 +28,16 @@ const applyStyleObject = (element, styles)=> {
 // Apply props that can be resolved immediately without subscribing to reactive values.
 const setStaticProp = (element, key, value)=> {
 	if (value == null || value === false){
+		return
+	}
+
+	if (isEventProp(key)){
+		if (typeof value === 'function'){
+			const eventName = key.slice(2).toLowerCase()
+			if (isSupportedEvent(element, eventName)){
+				element.addEventListener(eventName, value)
+			}
+		}
 		return
 	}
 
