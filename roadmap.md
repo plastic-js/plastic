@@ -5,7 +5,7 @@
 - [X] Support event binding via onXxx attributes.
 - [ ] Support SVG
 - [X] Support boolean attributes (e.g., disabled, checked).
-- [ ] Support class merging for static classes (e.g., class="btn" and classList={{ active: isTrue }} should coexist without overwriting each other).
+- [X] Support class merging for static classes (e.g., class="btn" and classList={{ active: isTrue }} should coexist without overwriting each other).
 
 ## [ ] Dynamic Element Manipulation
 - [ ] Support dynamic updates to text nodes.
