@@ -8,9 +8,16 @@
 - [X] Support class merging for static classes (e.g., class="btn" and classList={{ active: isTrue }} should coexist without overwriting each other).
 
 ## [ ] Dynamic Element Manipulation
-- [ ] Support dynamic updates to text nodes.
-- [ ] Support conditional classes via className attribute (e.g., className={isActive ? 'active' : ''}).
-- [ ] Support dynamic updates to attributes and styles.
+- [X] Support dynamic updates to text nodes.
+- [ ] Support reactive values in props via signal, computed.
+- [ ] Support dynamic updates to className, class and classList object entries .
+- [ ] Merge static classes and reactive classes without overwriting each other.
+- [ ] Remove stale class tokens when reactive class values change.
+- [ ] Support dynamic updates to boolean attributes such as disabled, checked, selected, and readOnly.
+- [ ] Support dynamic updates to style strings and style objects.
+- [ ] Diff style objects by key so removed style fields are cleaned up correctly.
+- [ ] Normalize reactive sources so text, prop, class, style, and child bindings use the same update pipeline.
+- [ ] Guarantee deterministic update order between parent effects and child effects.
 
 ## [ ] Component System
 - [ ] Support function components as JSX tags.
@@ -38,3 +45,10 @@
 - [ ] Ensure that when a component unmounts, all associated internal effects are automatically disposed.
 - [ ] Implement Component Function Execution Context.
 - [ ] Implement a strategy for cleaning up resources when components are unmounted, including event listeners and dynamic nodes.
+- [ ] Dispose binding effects when nodes are removed or components unmount.
+- [ ] Track cleanup handles for every binding effect.
+- [ ] Generalize effect-based subscriptions from text nodes to all reactive DOM bindings.
+
+## [ ] Performance Optimization
+- [ ] Avoid unnecessary DOM writes when a reactive prop resolves to the same value.
+- [ ] Batch multiple signal-triggered DOM updates in the same microtask.
