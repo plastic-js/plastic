@@ -361,7 +361,7 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.classList.contains('ghost')).toBe(true)
 	})
 
-	it('renders reactive nullish and boolean values as empty text', ()=> {
+	it('renders reactive nullish values as empty text and booleans as strings', ()=> {
 		const value = signal('ready')
 		const element = h('p', null, value)
 
@@ -371,7 +371,7 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('')
 
 		value(false)
-		expect(element.textContent).toBe('')
+		expect(element.textContent).toBe('false')
 
 		value(0)
 		expect(element.textContent).toBe('0')

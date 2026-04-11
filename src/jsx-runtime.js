@@ -5,13 +5,6 @@ import {
 const Fragment = Symbol('Fragment')
 
 const isReactive = value=> isSignal(value) || isComputed(value)
-const isReactiveProp = (key, value)=> {
-	if (key === 'children' || key === 'style' || isClassProp(key) || isEventProp(key)){
-		return false
-	}
-
-	return isReactive(value) || typeof value === 'function'
-}
 const createPlaceholder = ()=> document.createComment('null')
 const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
@@ -19,10 +12,9 @@ const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
 // jsx 語法層面，已經 disallow 'class'
 const isClassProp = key=> key === 'className' || key === 'classList'
-const readReactiveValue = source=> source()
 const classNameCache = new WeakMap()
 const normalizeTextNodeValue = (value)=> {
-	if (value == null || typeof value === 'boolean'){
+	if (value == null){
 		return ''
 	}
 
@@ -61,14 +53,6 @@ const toClassListMap = (value)=> {
 		map.set(token, true)
 	})
 	return map
-}
-
-const resolveClassListEntry = (value)=> {
-	if (isReactive(value) || typeof value === 'function'){
-		return value()
-	}
-
-	return value
 }
 
 const applyClassNameMap = (element, classNameMap)=> {
@@ -128,6 +112,13 @@ const applyClassProp = (element, value)=> {
 const hasReactiveClassListEntries = value=> value && typeof value === 'object' && Object.values(value).some(entry=> isReactive(entry) || typeof entry === 'function')
 
 const applyClassListProp = (element, value)=> {
+	const resolveClassListEntry = (value)=> {
+		if (isReactive(value) || typeof value === 'function'){
+			return value()
+		}
+
+		return value
+	}
 	// think of all the situations as reactive
 	effect(()=> {
 		// default to static value 
@@ -175,25 +166,6 @@ const clearDomProp = (element, key)=> {
 
 // Apply a prop value directly to the DOM. Reactive props reuse this same path inside effects.
 const setDomProp = (element, key, value)=> {
-	if (isClassProp(key)){
-		return
-	}
-
-	if (isEventProp(key)){
-		if (typeof value === 'function'){
-			const eventName = key.slice(2).toLowerCase()
-			if (isSupportedEvent(element, eventName)){
-				element.addEventListener(eventName, value)
-			}
-		}
-		return
-	}
-
-	if (key === 'style' && value && typeof value === 'object'){
-		applyStyleObject(element, value)
-		return
-	}
-
 	if (isBooleanDomProp(element, key)){
 		element[key] = Boolean(value)
 
@@ -219,10 +191,14 @@ const setDomProp = (element, key, value)=> {
 	element.setAttribute(key, String(value))
 }
 
-const bindReactiveProp = (element, key, source)=> {
-	effect(()=> {
-		setDomProp(element, key, readReactiveValue(source))
-	})
+const applyCommonAttribute = (element, key, source)=> {
+	if (isReactive(source) || typeof source === 'function'){
+		effect(()=> {
+			setDomProp(element, key, source())
+		})
+		return
+	}
+	setDomProp(element, key, source)
 }
 
 const applyProps = (element, props = {})=> {
@@ -246,12 +222,22 @@ const applyProps = (element, props = {})=> {
 			return
 		}
 
-		if (isReactiveProp(key, value)){
-			bindReactiveProp(element, key, value)
+		if (isEventProp(key)){
+			if (typeof value === 'function'){
+				const eventName = key.slice(2).toLowerCase()
+				if (isSupportedEvent(element, eventName)){
+					element.addEventListener(eventName, value)
+				}
+			}
 			return
 		}
 
-		setDomProp(element, key, value)
+		if (key === 'style' && value && typeof value === 'object'){
+			applyStyleObject(element, value)
+			return
+		}
+
+		applyCommonAttribute(element, key, value)
 	})
 	return element
 }
@@ -262,14 +248,12 @@ const node2Element = (node)=> {
 		console.error('null node', 1)
 		return createPlaceholder()
 	}
+	// reactive，但是不一定是text，目前假定他是text，for simplicity
 	if (isReactive(node)){
 		return createReactiveTextNode(node)
 	}
 	if (typeof node === 'string' || typeof node === 'number'){
 		return document.createTextNode(String(node))
-	}
-	if (typeof node === 'boolean'){
-		return createPlaceholder()
 	}
 	if (node instanceof HTMLElement || node instanceof Text || node instanceof Comment || node instanceof DocumentFragment){
 		return node
