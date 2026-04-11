@@ -248,6 +248,79 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
 	})
 
+	it('updates className from a signal without clobbering other class sources', ()=> {
+		const statusClass = signal('ready')
+		const element = h('div', {
+			class: 'card',
+			className: statusClass,
+			classList: {
+				active: true,
+			},
+		})
+
+		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('ready')).toBe(true)
+		expect(element.classList.contains('active')).toBe(true)
+
+		statusClass('published featured')
+
+		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('ready')).toBe(false)
+		expect(element.classList.contains('published')).toBe(true)
+		expect(element.classList.contains('featured')).toBe(true)
+
+		statusClass(null)
+
+		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('published')).toBe(false)
+		expect(element.classList.contains('featured')).toBe(false)
+	})
+
+	it('updates class from a computed source and removes stale tokens', ()=> {
+		const variant = signal('primary')
+		const className = computed(()=> {
+			return variant() === 'primary' ? 'btn solid' : 'btn ghost'
+		})
+		const element = h('button', {
+			class: className,
+		})
+
+		expect(element.classList.contains('btn')).toBe(true)
+		expect(element.classList.contains('solid')).toBe(true)
+		expect(element.classList.contains('ghost')).toBe(false)
+
+		variant('secondary')
+
+		expect(element.classList.contains('btn')).toBe(true)
+		expect(element.classList.contains('solid')).toBe(false)
+		expect(element.classList.contains('ghost')).toBe(true)
+	})
+
+	it('updates classList entries when reactive entry values change', ()=> {
+		const isActive = signal(true)
+		const isHidden = signal(false)
+		const element = h('div', {
+			className: 'panel',
+			classList: {
+				active: isActive,
+				hidden: ()=> isHidden(),
+			},
+		})
+
+		expect(element.classList.contains('panel')).toBe(true)
+		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('hidden')).toBe(false)
+
+		isActive(false)
+		isHidden(true)
+
+		expect(element.classList.contains('panel')).toBe(true)
+		expect(element.classList.contains('active')).toBe(false)
+		expect(element.classList.contains('hidden')).toBe(true)
+	})
+
 	it('renders reactive nullish and boolean values as empty text', ()=> {
 		const value = signal('ready')
 		const element = h('p', null, value)
