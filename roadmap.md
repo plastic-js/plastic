@@ -9,10 +9,10 @@
 
 ## [ ] Dynamic Element Manipulation
 - [X] Support dynamic updates to text nodes.
-- [ ] Support reactive values in props via signal, computed.
-- [ ] Support dynamic updates to className, class and classList object entries .
-- [ ] Merge static classes and reactive classes without overwriting each other.
-- [ ] Remove stale class tokens when reactive class values change.
+- [X] Support reactive values in props via signal, computed.
+- [X] Support dynamic updates to className, class and classList object entries .
+- [X] Merge static classes and reactive classes without overwriting each other.
+- [X] Remove stale class tokens when reactive class values change.
 - [ ] Support dynamic updates to boolean attributes such as disabled, checked, selected, and readOnly.
 - [ ] Support dynamic updates to style strings and style objects.
 - [ ] Diff style objects by key so removed style fields are cleaned up correctly.
