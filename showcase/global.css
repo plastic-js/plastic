@@ -151,11 +151,51 @@ button:disabled:hover {
     padding: 20px;
     display: grid;
     gap: 16px;
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, opacity 180ms ease;
 }
 
 .profile-card h3 {
     font-size: 1.6rem;
     letter-spacing: -0.03em;
+}
+
+.profile-shell {
+    position: relative;
+}
+
+.layout-wide {
+    box-shadow: 0 18px 42px rgba(29, 41, 53, 0.12);
+}
+
+.layout-compact {
+    box-shadow: 0 10px 26px rgba(29, 41, 53, 0.08);
+}
+
+.interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(15, 118, 110, 0.16);
+}
+
+.is-locked {
+    opacity: 0.72;
+    border-style: dashed;
+}
+
+.tone-amber {
+    border-color: rgba(180, 83, 9, 0.26);
+}
+
+.tone-teal {
+    border-color: rgba(15, 118, 110, 0.28);
+}
+
+.tone-coral {
+    border-color: rgba(234, 88, 12, 0.28);
+}
+
+.class-note {
+    font-size: 0.95rem;
+    color: #7c2d12;
 }
 
 .field-grid {

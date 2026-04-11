@@ -35,6 +35,27 @@ const reactiveDescription = computed(()=> `${activeProfile().role} · @${activeP
 const badgeLabel = computed(()=> {
 	return buttonLocked() ? 'Props are locked' : 'Props are live'
 })
+const profileTone = computed(()=> ['tone-amber', 'tone-teal', 'tone-coral'][profileIndex()])
+const profileCardClassName = computed(()=> {
+	return [
+		'profile-card',
+		'profile-shell',
+		profileIndex() % 2 === 0 ? 'layout-wide' : 'layout-compact',
+	].join(' ')
+})
+const classSummary = computed(()=> {
+	return buttonLocked() ? 'Reactive className keeps the base shell classes while classList disables .interactive and enables .is-locked.' : 'Reactive className keeps the base shell classes while classList enables .interactive and removes .is-locked.'
+})
+const profileCardClassList = computed(()=> {
+	return {
+		interactive: !buttonLocked(),
+		'is-locked': buttonLocked(),
+		'tone-teal': false,
+		'tone-coral': false,
+		'tone-amber': false,
+		[profileTone()]: true,
+	}
+})
 
 const cycleProfile = ()=> {
 	profileIndex((profileIndex() + 1) % profiles.length)
@@ -70,11 +91,15 @@ const app = (
 			</p>
 			<div
 				aria-label={()=> `Profile card for ${activeProfile().name}`}
-				className='profile-card'
+				classList={profileCardClassList}
+				className={profileCardClassName}
 				title={computed(()=> `${activeProfile().name} · ${activeProfile().role}`)}
 			>
 				<p className='profile-kicker'>
 					{reactiveDescription}
+				</p>
+				<p className='class-note'>
+					{classSummary}
 				</p>
 				<h3>
 					{computed(()=> activeProfile().name)}
@@ -102,6 +127,7 @@ const app = (
 				<p>The label stays connected to the input because htmlFor and id move together.</p>
 				<p>The third button flips its disabled property from a signal without re-creating the element.</p>
 				<p>The input placeholder comes from a getter source, not a signal object.</p>
+				<p>The card mixes reactive className and reactive classList; classList wins when they disagree.</p>
 			</div>
 		</section>
 	</div>

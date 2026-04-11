@@ -6,7 +6,7 @@ const Fragment = Symbol('Fragment')
 
 const isReactive = value=> isSignal(value) || isComputed(value)
 const isReactiveProp = (key, value)=> {
-	if (key === 'children' || key === 'style' || key === 'classList' || isClassProp(key) || isEventProp(key)){
+	if (key === 'children' || key === 'style' || isClassProp(key) || isEventProp(key)){
 		return false
 	}
 
@@ -17,9 +17,10 @@ const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
-const isClassProp = key=> key === 'class' || key === 'className'
+// jsx 語法層面，已經 disallow 'class'
+const isClassProp = key=> key === 'className' || key === 'classList'
 const readReactiveValue = source=> source()
-const classBindingState = new WeakMap()
+const classNameCache = new WeakMap()
 const normalizeTextNodeValue = (value)=> {
 	if (value == null || typeof value === 'boolean'){
 		return ''
@@ -37,6 +38,7 @@ const createReactiveTextNode = (reactiveValue)=> {
 
 	return textNode
 }
+
 const toClassTokens = (value)=> {
 	if (typeof value !== 'string'){
 		return new Set()
@@ -46,89 +48,102 @@ const toClassTokens = (value)=> {
 		.split(/\s+/)
 		.filter(Boolean))
 }
-const getClassBindingState = (element)=> {
-	let state = classBindingState.get(element)
 
-	if (!state){
-		state = {
-			appliedTokens: new Set(),
-			sources: new Map(),
-		}
-		classBindingState.set(element, state)
+const toClassListMap = (value)=> {
+	// null
+	if(!value){
+		return new Map()
 	}
-
-	return state
-}
-
-const syncClassSource = (element, sourceKey, nextTokens)=> {
-	const state = getClassBindingState(element)
-	state.sources.set(sourceKey, nextTokens)
-
-	const mergedTokens = new Set()
-	state.sources.forEach((tokens)=> {
-		tokens.forEach((token)=> {
-			mergedTokens.add(token)
-		})
+	// string
+	const tokens = toClassTokens(value)
+	const map = new Map()
+	tokens.forEach((token)=> {
+		map.set(token, true)
 	})
-
-	state.appliedTokens.forEach((token)=> {
-		if (!mergedTokens.has(token)){
-			element.classList.remove(token)
-		}
-	})
-
-	mergedTokens.forEach((token)=> {
-		if (!state.appliedTokens.has(token)){
-			element.classList.add(token)
-		}
-	})
-
-	state.appliedTokens = mergedTokens
+	return map
 }
 
 const resolveClassListEntry = (value)=> {
 	if (isReactive(value) || typeof value === 'function'){
-		return readReactiveValue(value)
+		return value()
 	}
 
 	return value
 }
 
-const toClassListTokens = (value)=> {
-	if (!value || typeof value !== 'object'){
-		return new Set()
+const applyClassNameMap = (element, classNameMap)=> {
+	if (!(classNameMap instanceof Map)){
+		const temp = new Map()
+		Object.entries(classNameMap).forEach(([className, enabled])=> {
+			temp.set(className, enabled)
+		})
+		classNameMap = temp
+	}
+	classNameMap.forEach((enabled, className)=> {
+		// if should be enabled but isn't, add it
+		if (enabled && !element.classList.contains(className)){
+			element.classList.add(className)
+		}
+
+		// if shouldn't be enabled but is, remove it
+		if (!enabled && element.classList.contains(className)){
+			element.classList.remove(className)
+		}
+	})
+}
+
+const applyClass = (element, key, value)=> {
+	if (key === 'classList'){
+		return applyClassListProp(element, value)
+	}
+	applyClassProp(element, value)
+}
+
+const getCachedClassSet = (element)=> {
+	let cached = classNameCache.get(element)
+	if (!cached){
+		cached = new Set()
+		classNameCache.set(element, cached)
+	}
+	return cached
+}
+
+const applyClassProp = (element, value)=> {
+	if (isReactive(value) || typeof value === 'function'){
+		effect(()=> {
+			const expectedClass = toClassListMap(value())
+			const actualClass = getCachedClassSet(element)
+			const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
+			const combinedClassMap = new Map([...expectedClass, ...shouldRemove.map(className=> [className, false])])
+			applyClassNameMap(element, combinedClassMap)
+			classNameCache.set(element, new Set(expectedClass.keys()))
+		})
+		return
 	}
 
-	return new Set(Object.entries(value)
-		.filter(([, enabled])=> Boolean(resolveClassListEntry(enabled)))
-		.map(([className])=> className))
+	applyClassNameMap(element, toClassListMap(value))
+	classNameCache.set(element, toClassTokens(value))
 }
 
 const hasReactiveClassListEntries = value=> value && typeof value === 'object' && Object.values(value).some(entry=> isReactive(entry) || typeof entry === 'function')
 
-const applyClassProp = (element, key, value)=> {
-	const sourceKey = `prop:${key}`
-
-	if (isReactive(value) || typeof value === 'function'){
-		effect(()=> {
-			syncClassSource(element, sourceKey, toClassTokens(readReactiveValue(value)))
-		})
-		return
-	}
-
-	syncClassSource(element, sourceKey, toClassTokens(value))
-}
-
 const applyClassListProp = (element, value)=> {
-	if (isReactive(value) || typeof value === 'function' || hasReactiveClassListEntries(value)){
-		effect(()=> {
-			const nextValue = isReactive(value) || typeof value === 'function' ? readReactiveValue(value) : value
-			syncClassSource(element, 'prop:classList', toClassListTokens(nextValue))
-		})
-		return
-	}
-
-	syncClassSource(element, 'prop:classList', toClassListTokens(value))
+	// think of all the situations as reactive
+	effect(()=> {
+		// default to static value 
+		let obj = value
+		if (isReactive(value) || typeof value === 'function'){
+			obj = value()
+		}
+		if (hasReactiveClassListEntries(value)){
+			// iterate through the object and resolve any reactive entries before applying the class list map
+			obj = Object.entries(value).reduce((acc, [className, enabled])=> {
+				acc[className] = resolveClassListEntry(enabled)
+				return acc
+			}, {})
+		}
+		applyClassNameMap(element, obj)
+	})
 }
 
 const applyStyleObject = (element, styles)=> {
@@ -160,7 +175,7 @@ const clearDomProp = (element, key)=> {
 
 // Apply a prop value directly to the DOM. Reactive props reuse this same path inside effects.
 const setDomProp = (element, key, value)=> {
-	if (key === 'classList' || isClassProp(key)){
+	if (isClassProp(key)){
 		return
 	}
 
@@ -210,19 +225,24 @@ const bindReactiveProp = (element, key, source)=> {
 	})
 }
 
-const applyStaticProps = (element, props = {})=> {
-	Object.entries(props).forEach(([key, value])=> {
+const applyProps = (element, props = {})=> {
+	const entries = Object.entries(props)
+	entries.sort(([keyA], [keyB])=> {
+		if (keyA === 'classList'){
+			return 1
+		}
+		if (keyB === 'classList'){
+			return -1
+		}
+		return 0
+	})
+	entries.forEach(([key, value])=> {
 		if (key === 'children'){
 			return
 		}
 
 		if (isClassProp(key)){
-			applyClassProp(element, key, value)
-			return
-		}
-
-		if (key === 'classList'){
-			applyClassListProp(element, value)
+			applyClass(element, key, value)
 			return
 		}
 
@@ -298,7 +318,7 @@ const h = (tag, props, ...children)=> {
 
 	// Native tags create real DOM elements directly without a virtual DOM layer.
 	const element = document.createElement(tag)
-	applyStaticProps(element, nextProps)
+	applyProps(element, nextProps)
 	appendChildren(element, mergedChildren)
 	return element
 }
@@ -326,5 +346,5 @@ export {
 	// expose some internal utils for testing and advanced use cases, but these are not considered part of the public API and may change without a major version bump.
 	appendChild,
 	appendChildren,
-	applyStaticProps,
+	applyProps,
 }

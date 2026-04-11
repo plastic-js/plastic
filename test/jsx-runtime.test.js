@@ -6,7 +6,7 @@ import {
 import {
 	appendChild,
 	appendChildren,
-	applyStaticProps,
+	applyProps,
 	computed,
 	h,
 	jsx,
@@ -33,7 +33,7 @@ describe('jsx runtime static rendering', ()=> {
 
 	it('applies static props onto an existing element', ()=> {
 		const element = document.createElement('label')
-		applyStaticProps(element, {
+		applyProps(element, {
 			htmlFor: 'field-id',
 			className: 'field-label',
 			style: {
@@ -50,10 +50,9 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
 	})
 
-	it('merges static class, className and classList props on created elements', ()=> {
+	it('merges static className and classList props on created elements', ()=> {
 		const element = h('div', {
-			class: 'btn primary',
-			className: 'card',
+			className: 'btn primary card',
 			classList: {
 				active: true,
 				disabled: false,
@@ -69,14 +68,28 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.classList.contains('disabled')).toBe(false)
 	})
 
-	it('merges classList with static classes regardless of prop order', ()=> {
+	it('lets classList override className tokens', ()=> {
+		const element = h('div', {
+			className: 'btn card primary',
+			classList: {
+				primary: false,
+				active: true,
+			},
+		})
+
+		expect(element.classList.contains('btn')).toBe(true)
+		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('primary')).toBe(false)
+		expect(element.classList.contains('active')).toBe(true)
+	})
+
+	it('merges classList with className regardless of prop order', ()=> {
 		const element = document.createElement('div')
-		applyStaticProps(element, {
+		applyProps(element, {
 			classList: {
 				selected: true,
 			},
-			className: 'panel',
-			class: 'raised',
+			className: 'panel raised',
 		})
 
 		expect(element.classList.contains('selected')).toBe(true)
@@ -107,7 +120,7 @@ describe('jsx runtime static rendering', ()=> {
 		input.disabled = true
 		input.setAttribute('disabled', '')
 
-		applyStaticProps(input, {
+		applyProps(input, {
 			checked: false,
 			disabled: false,
 		})
@@ -248,10 +261,9 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
 	})
 
-	it('updates className from a signal without clobbering other class sources', ()=> {
-		const statusClass = signal('ready')
+	it('updates className from a signal and preserves classList overrides', ()=> {
+		const statusClass = signal('card ready')
 		const element = h('div', {
-			class: 'card',
 			className: statusClass,
 			classList: {
 				active: true,
@@ -262,7 +274,7 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.classList.contains('ready')).toBe(true)
 		expect(element.classList.contains('active')).toBe(true)
 
-		statusClass('published featured')
+		statusClass('card published featured')
 
 		expect(element.classList.contains('card')).toBe(true)
 		expect(element.classList.contains('active')).toBe(true)
@@ -272,19 +284,20 @@ describe('jsx runtime static rendering', ()=> {
 
 		statusClass(null)
 
-		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('card')).toBe(false)
 		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('ready')).toBe(false)
 		expect(element.classList.contains('published')).toBe(false)
 		expect(element.classList.contains('featured')).toBe(false)
 	})
 
-	it('updates class from a computed source and removes stale tokens', ()=> {
+	it('updates className from a computed source and removes stale tokens', ()=> {
 		const variant = signal('primary')
 		const className = computed(()=> {
 			return variant() === 'primary' ? 'btn solid' : 'btn ghost'
 		})
 		const element = h('button', {
-			class: className,
+			className,
 		})
 
 		expect(element.classList.contains('btn')).toBe(true)
@@ -302,7 +315,7 @@ describe('jsx runtime static rendering', ()=> {
 		const isActive = signal(true)
 		const isHidden = signal(false)
 		const element = h('div', {
-			className: 'panel',
+			className: 'panel hidden',
 			classList: {
 				active: isActive,
 				hidden: ()=> isHidden(),
@@ -319,6 +332,33 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.classList.contains('panel')).toBe(true)
 		expect(element.classList.contains('active')).toBe(false)
 		expect(element.classList.contains('hidden')).toBe(true)
+	})
+
+	it('updates when classList itself is a reactive object and keeps override priority', ()=> {
+		const enabled = signal(true)
+		const classes = computed(()=> {
+			return {
+				ready: enabled(),
+				ghost: !enabled(),
+				base: false,
+			}
+		})
+		const element = h('div', {
+			className: 'base stable',
+			classList: classes,
+		})
+
+		expect(element.classList.contains('stable')).toBe(true)
+		expect(element.classList.contains('base')).toBe(false)
+		expect(element.classList.contains('ready')).toBe(true)
+		expect(element.classList.contains('ghost')).toBe(false)
+
+		enabled(false)
+
+		expect(element.classList.contains('stable')).toBe(true)
+		expect(element.classList.contains('base')).toBe(false)
+		expect(element.classList.contains('ready')).toBe(false)
+		expect(element.classList.contains('ghost')).toBe(true)
 	})
 
 	it('renders reactive nullish and boolean values as empty text', ()=> {
