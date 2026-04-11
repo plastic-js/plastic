@@ -5,12 +5,20 @@ import {
 const Fragment = Symbol('Fragment')
 
 const isReactive = value=> isSignal(value) || isComputed(value)
+const isReactiveProp = (key, value)=> {
+	if (key === 'children' || key === 'style' || key === 'classList' || isClassProp(key) || isEventProp(key)){
+		return false
+	}
+
+	return isReactive(value) || typeof value === 'function'
+}
 const createPlaceholder = ()=> document.createComment('null')
 const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
 const isClassProp = key=> key === 'class' || key === 'className'
+const readReactiveValue = source=> source()
 const normalizeTextNodeValue = (value)=> {
 	if (value == null || typeof value === 'boolean'){
 		return ''
@@ -72,8 +80,20 @@ const applyStyleObject = (element, styles)=> {
 	})
 }
 
-// Apply props that can be resolved immediately without subscribing to reactive values.
-const setStaticProp = (element, key, value)=> {
+const clearDomProp = (element, key)=> {
+	if (key in element){
+		try {
+			element[key] = ''
+		} catch {
+			// Read-only DOM properties still need their attributes cleared.
+		}
+	}
+
+	element.removeAttribute(key)
+}
+
+// Apply a prop value directly to the DOM. Reactive props reuse this same path inside effects.
+const setDomProp = (element, key, value)=> {
 	if (key === 'classList' || isClassProp(key)){
 		return
 	}
@@ -106,6 +126,7 @@ const setStaticProp = (element, key, value)=> {
 	}
 
 	if (value == null || value === false){
+		clearDomProp(element, key)
 		return
 	}
 
@@ -117,15 +138,26 @@ const setStaticProp = (element, key, value)=> {
 	element.setAttribute(key, String(value))
 }
 
+const bindReactiveProp = (element, key, source)=> {
+	effect(()=> {
+		setDomProp(element, key, readReactiveValue(source))
+	})
+}
+
 const applyStaticProps = (element, props = {})=> {
 	applyStaticClasses(element, props)
 
-	// Reactive props are skipped here because they need a separate update strategy.
 	Object.entries(props).forEach(([key, value])=> {
-		if (key === 'children' || isReactive(value)){
+		if (key === 'children'){
 			return
 		}
-		setStaticProp(element, key, value)
+
+		if (isReactiveProp(key, value)){
+			bindReactiveProp(element, key, value)
+			return
+		}
+
+		setDomProp(element, key, value)
 	})
 	return element
 }

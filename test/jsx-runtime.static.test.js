@@ -199,6 +199,55 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('Hello Lin')
 	})
 
+	it('updates DOM props when a signal prop changes', ()=> {
+		const title = signal('draft')
+		const element = h('div', {
+			title,
+		})
+
+		expect(element.title).toBe('draft')
+		expect(element.getAttribute('title')).toBe('draft')
+
+		title('published')
+
+		expect(element.title).toBe('published')
+		expect(element.getAttribute('title')).toBe('published')
+
+		title(null)
+
+		expect(element.title).toBe('')
+		expect(element.hasAttribute('title')).toBe(false)
+	})
+
+	it('updates DOM props when a computed prop changes', ()=> {
+		const fieldId = signal('email')
+		const htmlFor = computed(()=> `field-${fieldId()}`)
+		const element = h('label', {
+			htmlFor,
+		}, 'Email')
+
+		expect(element.htmlFor).toBe('field-email')
+		expect(element.getAttribute('for')).toBe('field-email')
+
+		fieldId('name')
+
+		expect(element.htmlFor).toBe('field-name')
+		expect(element.getAttribute('for')).toBe('field-name')
+	})
+
+	it('updates DOM props from getter sources that read signals', ()=> {
+		const prefix = signal('Ada')
+		const element = h('div', {
+			'aria-label': ()=> `${prefix()} Lovelace`,
+		})
+
+		expect(element.getAttribute('aria-label')).toBe('Ada Lovelace')
+
+		prefix('Grace')
+
+		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
+	})
+
 	it('renders reactive nullish and boolean values as empty text', ()=> {
 		const value = signal('ready')
 		const element = h('p', null, value)
