@@ -10,9 +10,6 @@ const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
-// jsx 語法層面，已經 disallow 'class'
-const isClassProp = key=> key === 'className' || key === 'classList'
-const classNameCache = new WeakMap()
 const normalizeTextNodeValue = (value)=> {
 	if (value == null){
 		return ''
@@ -41,7 +38,7 @@ const toClassTokens = (value)=> {
 		.filter(Boolean))
 }
 
-const toClassListMap = (value)=> {
+const toClassMap = (value)=> {
 	// null
 	if(!value){
 		return new Map()
@@ -76,67 +73,20 @@ const applyClassNameMap = (element, classNameMap)=> {
 	})
 }
 
-const applyClass = (element, key, value)=> {
-	if (key === 'classList'){
-		return applyClassListProp(element, value)
-	}
-	applyClassProp(element, value)
-}
-
-const getCachedClassSet = (element)=> {
-	let cached = classNameCache.get(element)
-	if (!cached){
-		cached = new Set()
-		classNameCache.set(element, cached)
-	}
-	return cached
-}
-
 const applyClassProp = (element, value)=> {
 	if (isReactive(value) || typeof value === 'function'){
 		effect(()=> {
-			const expectedClass = toClassListMap(value())
-			const actualClass = getCachedClassSet(element)
+			const expectedClass = toClassMap(value())
+			const actualClass = new Set(element.classList)
 			const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
 			const combinedClassMap = new Map([...expectedClass, ...shouldRemove.map(className=> [className, false])])
 			applyClassNameMap(element, combinedClassMap)
-			classNameCache.set(element, new Set(expectedClass.keys()))
 		})
 		return
 	}
 
-	applyClassNameMap(element, toClassListMap(value))
-	classNameCache.set(element, toClassTokens(value))
+	applyClassNameMap(element, toClassMap(value))
 }
-
-const hasReactiveClassListEntries = value=> value && typeof value === 'object' && Object.values(value).some(entry=> isReactive(entry) || typeof entry === 'function')
-
-const applyClassListProp = (element, value)=> {
-	const resolveClassListEntry = (value)=> {
-		if (isReactive(value) || typeof value === 'function'){
-			return value()
-		}
-
-		return value
-	}
-	// think of all the situations as reactive
-	effect(()=> {
-		// default to static value 
-		let obj = value
-		if (isReactive(value) || typeof value === 'function'){
-			obj = value()
-		}
-		if (hasReactiveClassListEntries(value)){
-			// iterate through the object and resolve any reactive entries before applying the class list map
-			obj = Object.entries(value).reduce((acc, [className, enabled])=> {
-				acc[className] = resolveClassListEntry(enabled)
-				return acc
-			}, {})
-		}
-		applyClassNameMap(element, obj)
-	})
-}
-
 const applyStyleObject = (element, styles)=> {
 	Object.entries(styles).forEach(([property, value])=> {
 		if (value == null || value === false){
@@ -203,22 +153,17 @@ const applyCommonAttribute = (element, key, source)=> {
 
 const applyProps = (element, props = {})=> {
 	const entries = Object.entries(props)
-	entries.sort(([keyA], [keyB])=> {
-		if (keyA === 'classList'){
-			return 1
-		}
-		if (keyB === 'classList'){
-			return -1
-		}
-		return 0
-	})
 	entries.forEach(([key, value])=> {
 		if (key === 'children'){
 			return
 		}
 
-		if (isClassProp(key)){
-			applyClass(element, key, value)
+		if (key === 'classList'){
+			throw new Error('classList prop is not supported. Use className instead.')
+		}
+
+		if (key === 'className'){
+			applyClassProp(element, value)
 			return
 		}
 

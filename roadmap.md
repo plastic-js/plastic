@@ -5,14 +5,13 @@
 - [X] Support event binding via onXxx attributes.
 - [ ] Support SVG
 - [X] Support boolean attributes (e.g., disabled, checked).
-- [X] Support class merging for static classes (e.g., class="btn" and classList={{ active: isTrue }} should coexist without overwriting each other).
+- [X] Support className for static classes.
 
 ## [ ] Dynamic Element Manipulation
 - [X] Support dynamic updates to text nodes.
 - [X] Support reactive values in props via signal, computed.
-- [X] Support dynamic updates to className, class and classList object entries .
-- [X] Merge static classes and reactive classes without overwriting each other.
-- [X] Remove stale class tokens when reactive class values change.
+- [X] Support dynamic updates to className.
+- [X] Remove stale class tokens when className values change reactively.
 - [ ] Support dynamic updates to boolean attributes such as disabled, checked, selected, and readOnly.
 - [ ] Support dynamic updates to style strings and style objects.
 - [ ] Diff style objects by key so removed style fields are cleaned up correctly.

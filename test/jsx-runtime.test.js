@@ -50,53 +50,6 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
 	})
 
-	it('merges static className and classList props on created elements', ()=> {
-		const element = h('div', {
-			className: 'btn primary card',
-			classList: {
-				active: true,
-				disabled: false,
-				accent: 1,
-			},
-		})
-
-		expect(element.classList.contains('btn')).toBe(true)
-		expect(element.classList.contains('primary')).toBe(true)
-		expect(element.classList.contains('card')).toBe(true)
-		expect(element.classList.contains('active')).toBe(true)
-		expect(element.classList.contains('accent')).toBe(true)
-		expect(element.classList.contains('disabled')).toBe(false)
-	})
-
-	it('lets classList override className tokens', ()=> {
-		const element = h('div', {
-			className: 'btn card primary',
-			classList: {
-				primary: false,
-				active: true,
-			},
-		})
-
-		expect(element.classList.contains('btn')).toBe(true)
-		expect(element.classList.contains('card')).toBe(true)
-		expect(element.classList.contains('primary')).toBe(false)
-		expect(element.classList.contains('active')).toBe(true)
-	})
-
-	it('merges classList with className regardless of prop order', ()=> {
-		const element = document.createElement('div')
-		applyProps(element, {
-			classList: {
-				selected: true,
-			},
-			className: 'panel raised',
-		})
-
-		expect(element.classList.contains('selected')).toBe(true)
-		expect(element.classList.contains('panel')).toBe(true)
-		expect(element.classList.contains('raised')).toBe(true)
-	})
-
 	it('supports boolean attributes on created elements', ()=> {
 		const button = h('button', {
 			disabled: true,
@@ -110,6 +63,14 @@ describe('jsx runtime static rendering', ()=> {
 		expect(button.getAttribute('disabled')).toBe('')
 		expect(input.checked).toBe(true)
 		expect(input.getAttribute('checked')).toBe('')
+	})
+
+	it('rejects classList prop and asks callers to use className', ()=> {
+		expect(()=> h('div', {
+			classList: {
+				active: true,
+			},
+		})).toThrow('classList prop is not supported. Use className instead.')
 	})
 
 	it('clears boolean attributes when false is provided', ()=> {
@@ -261,23 +222,20 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
 	})
 
-	it('updates className from a signal and preserves classList overrides', ()=> {
+	it('updates className from a signal and removes stale tokens', ()=> {
 		const statusClass = signal('card ready')
 		const element = h('div', {
 			className: statusClass,
-			classList: {
-				active: true,
-			},
 		})
 
 		expect(element.classList.contains('card')).toBe(true)
 		expect(element.classList.contains('ready')).toBe(true)
-		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('active')).toBe(false)
 
 		statusClass('card published featured')
 
 		expect(element.classList.contains('card')).toBe(true)
-		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('active')).toBe(false)
 		expect(element.classList.contains('ready')).toBe(false)
 		expect(element.classList.contains('published')).toBe(true)
 		expect(element.classList.contains('featured')).toBe(true)
@@ -285,7 +243,7 @@ describe('jsx runtime static rendering', ()=> {
 		statusClass(null)
 
 		expect(element.classList.contains('card')).toBe(false)
-		expect(element.classList.contains('active')).toBe(true)
+		expect(element.classList.contains('active')).toBe(false)
 		expect(element.classList.contains('ready')).toBe(false)
 		expect(element.classList.contains('published')).toBe(false)
 		expect(element.classList.contains('featured')).toBe(false)
@@ -308,56 +266,6 @@ describe('jsx runtime static rendering', ()=> {
 
 		expect(element.classList.contains('btn')).toBe(true)
 		expect(element.classList.contains('solid')).toBe(false)
-		expect(element.classList.contains('ghost')).toBe(true)
-	})
-
-	it('updates classList entries when reactive entry values change', ()=> {
-		const isActive = signal(true)
-		const isHidden = signal(false)
-		const element = h('div', {
-			className: 'panel hidden',
-			classList: {
-				active: isActive,
-				hidden: ()=> isHidden(),
-			},
-		})
-
-		expect(element.classList.contains('panel')).toBe(true)
-		expect(element.classList.contains('active')).toBe(true)
-		expect(element.classList.contains('hidden')).toBe(false)
-
-		isActive(false)
-		isHidden(true)
-
-		expect(element.classList.contains('panel')).toBe(true)
-		expect(element.classList.contains('active')).toBe(false)
-		expect(element.classList.contains('hidden')).toBe(true)
-	})
-
-	it('updates when classList itself is a reactive object and keeps override priority', ()=> {
-		const enabled = signal(true)
-		const classes = computed(()=> {
-			return {
-				ready: enabled(),
-				ghost: !enabled(),
-				base: false,
-			}
-		})
-		const element = h('div', {
-			className: 'base stable',
-			classList: classes,
-		})
-
-		expect(element.classList.contains('stable')).toBe(true)
-		expect(element.classList.contains('base')).toBe(false)
-		expect(element.classList.contains('ready')).toBe(true)
-		expect(element.classList.contains('ghost')).toBe(false)
-
-		enabled(false)
-
-		expect(element.classList.contains('stable')).toBe(true)
-		expect(element.classList.contains('base')).toBe(false)
-		expect(element.classList.contains('ready')).toBe(false)
 		expect(element.classList.contains('ghost')).toBe(true)
 	})
 

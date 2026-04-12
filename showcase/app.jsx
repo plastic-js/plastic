@@ -40,22 +40,12 @@ const profileCardClassName = computed(()=> {
 	return [
 		'profile-card',
 		'profile-shell',
+		buttonLocked() ? 'is-locked' : 'interactive',
+		profileTone(),
 		profileIndex() % 2 === 0 ? 'layout-wide' : 'layout-compact',
 	].join(' ')
 })
-const classSummary = computed(()=> {
-	return buttonLocked() ? 'Reactive className keeps the base shell classes while classList disables .interactive and enables .is-locked.' : 'Reactive className keeps the base shell classes while classList enables .interactive and removes .is-locked.'
-})
-const profileCardClassList = computed(()=> {
-	return {
-		interactive: !buttonLocked(),
-		'is-locked': buttonLocked(),
-		'tone-teal': false,
-		'tone-coral': false,
-		'tone-amber': false,
-		[profileTone()]: true,
-	}
-})
+const classSummary = 'Reactive className now directly controls .interactive and .is-locked classes.'
 
 const cycleProfile = ()=> {
 	profileIndex((profileIndex() + 1) % profiles.length)
@@ -91,7 +81,6 @@ const app = (
 			</p>
 			<div
 				aria-label={()=> `Profile card for ${activeProfile().name}`}
-				classList={profileCardClassList}
 				className={profileCardClassName}
 				title={computed(()=> `${activeProfile().name} · ${activeProfile().role}`)}
 			>
@@ -127,7 +116,7 @@ const app = (
 				<p>The label stays connected to the input because htmlFor and id move together.</p>
 				<p>The third button flips its disabled property from a signal without re-creating the element.</p>
 				<p>The input placeholder comes from a getter source, not a signal object.</p>
-				<p>The card mixes reactive className and reactive classList; classList wins when they disagree.</p>
+				<p>The card style and tone are fully controlled by a single reactive className value.</p>
 			</div>
 		</section>
 	</div>
