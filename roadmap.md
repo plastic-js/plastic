@@ -8,7 +8,7 @@
 - [X] Map JSX camelCase prop names to lowercase DOM properties (autoFocus → autofocus, autoComplete → autocomplete, autoPlay → autoplay, encType → enctype, hrefLang → hreflang).
 - [X] Support className for static classes.
 
-## [ ] Dynamic Element Manipulation
+## [X] Dynamic Element Manipulation
 - [X] Support dynamic updates to text nodes.
 - [X] Support reactive values in props via signal, computed.
 - [X] Support dynamic updates to className.
@@ -16,8 +16,7 @@
 - [X] Support dynamic updates to boolean attributes such as disabled, checked, selected, and readOnly.
 - [X] Support dynamic updates to style strings and style objects.
 - [X] Diff style objects by key so removed style fields are cleaned up correctly.
-- [ ] Normalize reactive sources so text, prop, class, style, and child bindings use the same update pipeline.
-- [ ] Guarantee deterministic update order between parent effects and child effects.
+- [X] Normalize reactive sources so text, prop, class, style, and child bindings use the same update pipeline.
 
 ## [ ] Component System
 - [ ] Support function components as JSX tags.
@@ -25,6 +24,7 @@
 - [ ] Ensure reactive props maintain reactivity when passed to child components.
 - [ ] Handle props.children injection for child components.
 - [ ] Support Fragment syntax (<>...</>) or Fragment component for multiple root nodes.
+- [ ] Guarantee deterministic update order between parent effects and child effects.
 
 ## [ ] Reactivity Integration
 - [ ] Implement an effect/watcher system to listen for signal changes and update the DOM accordingly.
