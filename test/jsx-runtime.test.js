@@ -446,6 +446,63 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('content')
 	})
 
+	it('maps autoFocus to the autofocus DOM property', ()=> {
+		const input = h('input', {
+			autoFocus: true,
+		})
+
+		expect(input.autofocus).toBe(true)
+		expect(input.getAttribute('autofocus')).toBe('')
+	})
+
+	it('maps autoComplete to the autocomplete DOM property on input', ()=> {
+		const input = h('input', {
+			autoComplete: 'email',
+		})
+
+		expect(input.autocomplete).toBe('email')
+	})
+
+	it('maps autoPlay to the autoplay DOM property on video', ()=> {
+		const video = h('video', {
+			autoPlay: true,
+		})
+
+		expect(video.autoplay).toBe(true)
+		expect(video.getAttribute('autoplay')).toBe('')
+	})
+
+	it('maps encType to the enctype DOM property on form', ()=> {
+		const form = h('form', {
+			encType: 'multipart/form-data',
+		})
+
+		expect(form.enctype).toBe('multipart/form-data')
+	})
+
+	it('maps hrefLang to the hreflang DOM property on anchor', ()=> {
+		const a = h('a', {
+			hrefLang: 'zh-TW',
+		})
+
+		expect(a.hreflang).toBe('zh-TW')
+	})
+
+	it('supports reactive autoFocus via a signal', ()=> {
+		const focused = signal(false)
+		const input = h('input', {
+			autoFocus: focused,
+		})
+
+		expect(input.autofocus).toBe(false)
+		expect(input.hasAttribute('autofocus')).toBe(false)
+
+		focused(true)
+
+		expect(input.autofocus).toBe(true)
+		expect(input.getAttribute('autofocus')).toBe('')
+	})
+
 	it('rejects custom component tags', ()=> {
 		const CustomTag = ()=> document.createElement('div')
 

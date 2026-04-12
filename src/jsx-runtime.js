@@ -11,6 +11,17 @@ const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
 
+// JSX uses camelCase for some props whose corresponding DOM property is all-lowercase.
+// Normalise the key before any DOM access so the property lookup and setAttribute
+// calls use the name the browser actually exposes.
+const JSX_PROP_MAP = {
+	autoComplete: 'autocomplete',
+	autoFocus: 'autofocus',
+	autoPlay: 'autoplay',
+	encType: 'enctype',
+	hrefLang: 'hreflang',
+}
+
 const normalizeTextNodeValue = (value)=> {
 	if (value == null){
 		return ''
@@ -222,7 +233,8 @@ const applyProps = (element, props = {})=> {
 			return
 		}
 
-		applyCommonAttribute(element, key, value)
+		const domKey = JSX_PROP_MAP[key] ?? key
+		applyCommonAttribute(element, domKey, value)
 	})
 	return element
 }

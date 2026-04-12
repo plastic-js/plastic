@@ -5,6 +5,7 @@
 - [X] Support event binding via onXxx attributes.
 - [ ] Support SVG
 - [X] Support boolean attributes (e.g., disabled, checked).
+- [X] Map JSX camelCase prop names to lowercase DOM properties (autoFocus → autofocus, autoComplete → autocomplete, autoPlay → autoplay, encType → enctype, hrefLang → hreflang).
 - [X] Support className for static classes.
 
 ## [ ] Dynamic Element Manipulation

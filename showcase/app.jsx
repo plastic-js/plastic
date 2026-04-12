@@ -62,6 +62,9 @@ const cycleStyleMode = ()=> {
 	styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')
 }
 
+const autoFocusEnabled = signal(false)
+const toggleAutoFocus = ()=> autoFocusEnabled(!autoFocusEnabled())
+
 const cycleProfile = ()=> {
 	profileIndex((profileIndex() + 1) % profiles.length)
 }
@@ -130,10 +133,59 @@ const app = (
 				The box below binds its style prop to a computed object. Switching modes removes the old borderLeft key and applies new values without leaving stale properties behind.
 			</p>
 			<div style={reactiveStyle}>
-				Style object updates reactively. Current mode: <strong>{styleMode}</strong>
+				Style object updates reactively. Current mode:
+				{' '}
+				<strong>
+					{styleMode}
+				</strong>
 			</div>
 			<div className='button-row'>
 				<button onClick={cycleStyleMode} type='button'>Switch style mode</button>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>JSX prop name mapping</h2>
+			<p className='feature-copy'>
+				JSX camelCase props like
+				{' '}
+				<code>autoFocus</code>
+				{' '}
+				and
+				{' '}
+				<code>autoComplete</code>
+				{' '}
+				are automatically mapped to the correct lowercase DOM properties (
+				<code>autofocus</code>
+				,
+				{' '}
+				<code>autocomplete</code>
+				) before being applied.
+			</p>
+			<div className='field-grid'>
+				<label htmlFor='search-box'>Search (autoComplete=off)</label>
+				<input
+					autoComplete='off'
+					id='search-box'
+					placeholder='autocomplete is off'
+					type='search'
+				/>
+			</div>
+			<div className='field-grid'>
+				<label htmlFor='focus-input'>Input with reactive autoFocus</label>
+				<input
+					autoFocus={autoFocusEnabled}
+					id='focus-input'
+					placeholder='toggle autofocus below'
+					type='text'
+				/>
+			</div>
+			<div className='button-row'>
+				<button onClick={toggleAutoFocus} type='button'>
+					Toggle autoFocus (currently:
+					{' '}
+					{computed(()=> (autoFocusEnabled() ? 'on' : 'off'))}
+					)
+				</button>
 			</div>
 		</section>
 		<section className='feature-card'>
