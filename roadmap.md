@@ -13,8 +13,8 @@
 - [X] Support dynamic updates to className.
 - [X] Remove stale class tokens when className values change reactively.
 - [X] Support dynamic updates to boolean attributes such as disabled, checked, selected, and readOnly.
-- [ ] Support dynamic updates to style strings and style objects.
-- [ ] Diff style objects by key so removed style fields are cleaned up correctly.
+- [X] Support dynamic updates to style strings and style objects.
+- [X] Diff style objects by key so removed style fields are cleaned up correctly.
 - [ ] Normalize reactive sources so text, prop, class, style, and child bindings use the same update pipeline.
 - [ ] Guarantee deterministic update order between parent effects and child effects.
 
