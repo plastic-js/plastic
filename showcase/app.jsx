@@ -5,6 +5,37 @@ import {
 } from '../src/jsx-runtime.js'
 import './global.css'
 
+// ─── Function Components ──────────────────────────────────────────────────────
+
+// Accepts static and reactive props; renders a labelled metric tile.
+const StatCard = ({
+	title, value, unit = '',
+})=> (
+	<div className='stat-card'>
+		<span className='stat-label'>
+			{title}
+		</span>
+		<span className='stat-value'>
+			{value}
+			{unit}
+		</span>
+	</div>
+)
+
+// Wraps children in a coloured pill; `variant` controls the modifier class.
+const Tag = ({ children, variant = 'default' })=> (
+	<span className={`tag tag-${variant}`}>
+		{children}
+	</span>
+)
+
+// Uses a reactive prop to drive a status tag and a metric tile together.
+const taps = signal(0)
+const tapStatus = computed(()=> taps() >= 5 ? 'hot' : taps() >= 2 ? 'warm' : 'cool')
+const tapVariant = computed(()=> taps() >= 5 ? 'danger' : taps() >= 2 ? 'warning' : 'info')
+const incrementTaps = ()=> taps(taps() + 1)
+const resetTaps = ()=> taps(0)
+
 const profileIndex = signal(0)
 const buttonLocked = signal(false)
 
@@ -186,6 +217,38 @@ const app = (
 					{computed(()=> (autoFocusEnabled() ? 'on' : 'off'))}
 					)
 				</button>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<div className='section-head'>
+				<div>
+					<h2>Function components</h2>
+					<p>Components are plain functions that receive props and return DOM nodes.</p>
+				</div>
+				<Tag variant={tapVariant}>
+					{tapStatus}
+				</Tag>
+			</div>
+			<p className='feature-copy'>
+				<code>StatCard</code>
+				{' '}
+				receives a reactive signal as its
+				<code>value</code>
+				{' '}
+				prop — the binding stays live inside the component without any extra wiring.
+				<code>Tag</code>
+				{' '}
+				receives children injected via
+				<code>props.children</code>
+				.
+			</p>
+			<div className='stat-grid'>
+				<StatCard title='Tap count' unit=' taps' value={taps} />
+				<StatCard title='Status' value={tapStatus} />
+			</div>
+			<div className='button-row'>
+				<button onClick={incrementTaps} type='button'>Tap</button>
+				<button onClick={resetTaps} type='button'>Reset</button>
 			</div>
 		</section>
 		<section className='feature-card'>

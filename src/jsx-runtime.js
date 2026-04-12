@@ -293,6 +293,12 @@ const h = (tag, props, ...children)=> {
 		return fragment
 	}
 
+	if (typeof tag === 'function'){
+		// Function components receive a single props object; children are injected under props.children.
+		const componentProps = { ...nextProps, children: mergedChildren.length === 1 ? mergedChildren[0] : mergedChildren }
+		return tag(componentProps)
+	}
+
 	if (typeof tag !== 'string'){
 		throw new Error('Only static string tags and Fragment are supported.')
 	}

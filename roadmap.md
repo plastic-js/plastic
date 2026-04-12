@@ -19,9 +19,9 @@
 - [X] Normalize reactive sources so text, prop, class, style, and child bindings use the same update pipeline.
 
 ## [ ] Component System
-- [ ] Support function components as JSX tags.
-- [ ] Support props passing to child components.
-- [ ] Ensure reactive props maintain reactivity when passed to child components.
+- [X] Support function components as JSX tags.
+- [X] Support props passing to child components.
+- [X] Ensure reactive props maintain reactivity when passed to child components.
 - [ ] Handle props.children injection for child components.
 - [ ] Support Fragment syntax (<>...</>) or Fragment component for multiple root nodes.
 - [ ] Guarantee deterministic update order between parent effects and child effects.

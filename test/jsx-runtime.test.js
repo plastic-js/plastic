@@ -503,9 +503,38 @@ describe('jsx runtime static rendering', ()=> {
 		expect(input.getAttribute('autofocus')).toBe('')
 	})
 
-	it('rejects custom component tags', ()=> {
-		const CustomTag = ()=> document.createElement('div')
+	it('renders a function component by calling it with props', ()=> {
+		const Greeting = ({ name })=> h('span', null, `Hello, ${name}!`)
+		const element = h(Greeting, { name: 'World' })
 
-		expect(()=> h(CustomTag, null)).toThrow('Only static string tags and Fragment are supported.')
+		expect(element.tagName).toBe('SPAN')
+		expect(element.textContent).toBe('Hello, World!')
+	})
+
+	it('passes children to function components via props.children', ()=> {
+		const Wrapper = ({ children })=> {
+			const div = document.createElement('div')
+			div.className = 'wrapper'
+			appendChildren(div, Array.isArray(children) ? children : [children])
+			return div
+		}
+		const element = h(Wrapper, null, h('p', null, 'inner'))
+
+		expect(element.tagName).toBe('DIV')
+		expect(element.className).toBe('wrapper')
+		expect(element.firstChild.tagName).toBe('P')
+		expect(element.firstChild.textContent).toBe('inner')
+	})
+
+	it('passes reactive props to function components', ()=> {
+		const Label = ({ text })=> h('label', null, text)
+		const text = signal('draft')
+		const element = h(Label, { text })
+
+		expect(element.textContent).toBe('draft')
+
+		text('published')
+
+		expect(element.textContent).toBe('published')
 	})
 })
