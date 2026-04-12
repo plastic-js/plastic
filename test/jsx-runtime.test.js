@@ -222,6 +222,77 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
 	})
 
+	it('updates dynamic boolean props from a signal source', ()=> {
+		const disabled = signal(true)
+		const checked = signal(true)
+		const selected = signal(true)
+		const readOnly = signal(true)
+
+		const button = h('button', {
+			disabled,
+		}, 'Submit')
+		const checkbox = h('input', {
+			type: 'checkbox',
+			checked,
+		})
+		const option = h('option', {
+			selected,
+		}, 'A')
+		const textInput = h('input', {
+			type: 'text',
+			readOnly,
+		})
+
+		expect(button.disabled).toBe(true)
+		expect(button.hasAttribute('disabled')).toBe(true)
+		expect(checkbox.checked).toBe(true)
+		expect(checkbox.hasAttribute('checked')).toBe(true)
+		expect(option.selected).toBe(true)
+		expect(option.hasAttribute('selected')).toBe(true)
+		expect(textInput.readOnly).toBe(true)
+		expect(textInput.hasAttribute('readonly')).toBe(true)
+
+		disabled(false)
+		checked(false)
+		selected(false)
+		readOnly(false)
+
+		expect(button.disabled).toBe(false)
+		expect(button.hasAttribute('disabled')).toBe(false)
+		expect(checkbox.checked).toBe(false)
+		expect(checkbox.hasAttribute('checked')).toBe(false)
+		expect(option.selected).toBe(false)
+		expect(option.hasAttribute('selected')).toBe(false)
+		expect(textInput.readOnly).toBe(false)
+		expect(textInput.hasAttribute('readonly')).toBe(false)
+	})
+
+	it('updates dynamic boolean props from a computed source', ()=> {
+		const ready = signal(false)
+		const enabled = computed(()=> ready())
+		const editable = computed(()=> ready())
+
+		const button = h('button', {
+			disabled: computed(()=> !enabled()),
+		}, 'Submit')
+		const textInput = h('input', {
+			type: 'text',
+			readOnly: computed(()=> !editable()),
+		})
+
+		expect(button.disabled).toBe(true)
+		expect(button.hasAttribute('disabled')).toBe(true)
+		expect(textInput.readOnly).toBe(true)
+		expect(textInput.hasAttribute('readonly')).toBe(true)
+
+		ready(true)
+
+		expect(button.disabled).toBe(false)
+		expect(button.hasAttribute('disabled')).toBe(false)
+		expect(textInput.readOnly).toBe(false)
+		expect(textInput.hasAttribute('readonly')).toBe(false)
+	})
+
 	it('updates className from a signal and removes stale tokens', ()=> {
 		const statusClass = signal('card ready')
 		const element = h('div', {
