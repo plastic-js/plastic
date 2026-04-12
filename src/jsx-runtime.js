@@ -3,13 +3,14 @@ import {
 } from 'alien-signals'
 
 const Fragment = Symbol('Fragment')
-
-const isReactive = value=> isSignal(value) || isComputed(value)
+const isReactivePrimitive = value=> isSignal(value) || isComputed(value)
+const isReactive = value=> isReactivePrimitive(value) || typeof value === 'function'
 const createPlaceholder = ()=> document.createComment('null')
 const flattenChildren = children=> children.flat(Infinity)
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
+
 const normalizeTextNodeValue = (value)=> {
 	if (value == null){
 		return ''
@@ -74,7 +75,7 @@ const applyClassNameMap = (element, classNameMap)=> {
 }
 
 const applyClassProp = (element, value)=> {
-	if (isReactive(value) || typeof value === 'function'){
+	if (isReactive(value)){
 		effect(()=> {
 			const expectedClass = toClassMap(value())
 			const actualClass = new Set(element.classList)
@@ -111,7 +112,7 @@ const clearStyleKey = (element, key)=> {
 }
 
 const applyStyleProp = (element, value)=> {
-	if (isReactive(value) || typeof value === 'function'){
+	if (isReactive(value)){
 		let prevKeys = new Set()
 		effect(()=> {
 			const resolved = value()
@@ -181,7 +182,7 @@ const setDomProp = (element, key, value)=> {
 }
 
 const applyCommonAttribute = (element, key, source)=> {
-	if (isReactive(source) || typeof source === 'function'){
+	if (isReactive(source)){
 		effect(()=> {
 			setDomProp(element, key, source())
 		})
