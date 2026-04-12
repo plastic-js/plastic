@@ -356,6 +356,81 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('0')
 	})
 
+	it('applies a static style string via cssText', ()=> {
+		const element = h('div', {
+			style: 'color: red; font-size: 14px',
+		})
+
+		expect(element.style.color).toBe('red')
+		expect(element.style.fontSize).toBe('14px')
+	})
+
+	it('updates style from a reactive string and clears on null', ()=> {
+		const styleStr = signal('color: red')
+		const element = h('div', {
+			style: styleStr,
+		})
+
+		expect(element.style.color).toBe('red')
+
+		styleStr('color: blue; font-size: 12px')
+
+		expect(element.style.color).toBe('blue')
+		expect(element.style.fontSize).toBe('12px')
+
+		styleStr(null)
+
+		expect(element.style.cssText).toBe('')
+	})
+
+	it('updates style from a reactive object and clears removed keys', ()=> {
+		const styles = signal({
+			color: 'red',
+			fontSize: '14px',
+		})
+		const element = h('div', {
+			style: styles,
+		})
+
+		expect(element.style.color).toBe('red')
+		expect(element.style.fontSize).toBe('14px')
+
+		styles({
+			color: 'blue',
+		})
+
+		expect(element.style.color).toBe('blue')
+		expect(element.style.fontSize).toBe('')
+	})
+
+	it('updates style from a computed source and diffs keys correctly', ()=> {
+		const active = signal(false)
+		const styles = computed(()=> active()
+			? {
+				fontWeight: 'bold',
+				color: 'green',
+			}
+			: {
+				fontWeight: 'normal',
+			})
+		const element = h('div', {
+			style: styles,
+		})
+
+		expect(element.style.fontWeight).toBe('normal')
+		expect(element.style.color).toBe('')
+
+		active(true)
+
+		expect(element.style.fontWeight).toBe('bold')
+		expect(element.style.color).toBe('green')
+
+		active(false)
+
+		expect(element.style.fontWeight).toBe('normal')
+		expect(element.style.color).toBe('')
+	})
+
 	it('routes jsx automatic runtime calls through h', ()=> {
 		const element = jsx('section', {
 			className: 'panel',

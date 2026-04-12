@@ -102,6 +102,45 @@ const applyStyleObject = (element, styles)=> {
 	})
 }
 
+const clearStyleKey = (element, key)=> {
+	if (key.startsWith('--')){
+		element.style.removeProperty(key)
+	} else {
+		element.style[key] = ''
+	}
+}
+
+const applyStyleProp = (element, value)=> {
+	if (isReactive(value) || typeof value === 'function'){
+		let prevKeys = new Set()
+		effect(()=> {
+			const resolved = value()
+			if (typeof resolved === 'string' || resolved == null){
+				element.style.cssText = resolved ?? ''
+				prevKeys = new Set()
+			} else if (typeof resolved === 'object'){
+				prevKeys.forEach((key)=> {
+					if (!(key in resolved)){
+						clearStyleKey(element, key)
+					}
+				})
+				applyStyleObject(element, resolved)
+				prevKeys = new Set(Object.keys(resolved))
+			}
+		})
+		return
+	}
+
+	if (typeof value === 'string'){
+		element.style.cssText = value
+		return
+	}
+
+	if (value && typeof value === 'object'){
+		applyStyleObject(element, value)
+	}
+}
+
 const clearDomProp = (element, key)=> {
 	if (key in element){
 		try {
@@ -177,8 +216,8 @@ const applyProps = (element, props = {})=> {
 			return
 		}
 
-		if (key === 'style' && value && typeof value === 'object'){
-			applyStyleObject(element, value)
+		if (key === 'style'){
+			applyStyleProp(element, value)
 			return
 		}
 

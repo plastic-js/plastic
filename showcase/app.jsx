@@ -47,6 +47,21 @@ const profileCardClassName = computed(()=> {
 })
 const classSummary = 'Reactive className now directly controls .interactive and .is-locked classes.'
 
+const styleMode = signal('highlight')
+const reactiveStyle = computed(()=> styleMode() === 'highlight'
+	? {
+		background: '#fffbcc',
+		padding: '8px 12px',
+		borderLeft: '3px solid #f0c040',
+	}
+	: {
+		background: '#e8f5e9',
+		padding: '8px 12px',
+	})
+const cycleStyleMode = ()=> {
+	styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')
+}
+
 const cycleProfile = ()=> {
 	profileIndex((profileIndex() + 1) % profiles.length)
 }
@@ -107,6 +122,18 @@ const app = (
 					<button onClick={toggleLock} type='button'>Toggle disabled prop</button>
 					<button disabled={buttonLocked} type='button'>Reactive disabled</button>
 				</div>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Reactive style</h2>
+			<p className='feature-copy'>
+				The box below binds its style prop to a computed object. Switching modes removes the old borderLeft key and applies new values without leaving stale properties behind.
+			</p>
+			<div style={reactiveStyle}>
+				Style object updates reactively. Current mode: <strong>{styleMode}</strong>
+			</div>
+			<div className='button-row'>
+				<button onClick={cycleStyleMode} type='button'>Switch style mode</button>
 			</div>
 		</section>
 		<section className='feature-card'>
