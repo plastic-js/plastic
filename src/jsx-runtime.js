@@ -284,7 +284,8 @@ const appendChildren = (parent, children)=> {
 const h = (tag, props, ...children)=> {
 	const nextProps = props || {}
 	const propChildren = nextProps.children ?? []
-	const mergedChildren = [...[propChildren], ...children]
+	const normalizedPropChildren = Array.isArray(propChildren) ? propChildren : [propChildren]
+	const mergedChildren = [...normalizedPropChildren, ...children]
 
 	if (tag === Fragment){
 		// Fragments produce a DocumentFragment so no wrapper element is introduced.

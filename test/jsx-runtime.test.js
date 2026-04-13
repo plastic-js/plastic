@@ -526,6 +526,30 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.firstChild.textContent).toBe('inner')
 	})
 
+	it('passes a single vararg child as a bare node, not wrapped in an array', ()=> {
+		const Wrapper = ({ children })=> {
+			expect(Array.isArray(children)).toBe(false)
+			return h('div', null, children)
+		}
+		const element = h(Wrapper, null, h('p', null, 'solo'))
+
+		expect(element.firstChild.tagName).toBe('P')
+		expect(element.firstChild.textContent).toBe('solo')
+	})
+
+	it('passes multiple vararg children as an array without a leading empty entry', ()=> {
+		const List = ({ children })=> {
+			expect(Array.isArray(children)).toBe(true)
+			expect(children).toHaveLength(2)
+			return h('ul', null, children)
+		}
+		const element = h(List, null, h('li', null, 'a'), h('li', null, 'b'))
+
+		expect(element.querySelectorAll('li')).toHaveLength(2)
+		expect(element.querySelectorAll('li')[0].textContent).toBe('a')
+		expect(element.querySelectorAll('li')[1].textContent).toBe('b')
+	})
+
 	it('passes reactive props to function components', ()=> {
 		const Label = ({ text })=> h('label', null, text)
 		const text = signal('draft')
