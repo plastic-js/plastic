@@ -25,14 +25,35 @@
 - [X] Support Fragment syntax (<>...</>) or Fragment component for multiple root nodes.
 
 ## Lifecycle & Resource Management
-- [ ] Implement Component Function Execution Context (owner/scope tree for reactive cleanup).
-- [ ] Generalize effect-based subscriptions from text nodes to all reactive DOM bindings.
-- [ ] Track cleanup handles for every binding effect.
-- [ ] Define unmount trigger mechanism: how components/nodes signal their removal (via control flow, explicit call, or observer).
-- [ ] Dispose all binding effects and event listeners when a component unmounts.
-- [ ] Propagate disposal down the owner tree so child scopes are cleaned up automatically.
-- [ ] Support onCleanup inside effects (run before each re-execution, not only on unmount).
-- [ ] Implement onMount and onCleanup hooks as the public-facing lifecycle API.
+
+### Owner/Scope Tree System (Core Foundation)
+- [X] Implement owner/scope tree for component function execution context.
+- [X] Support parent-child owner relationships to track component hierarchy.
+- [X] Propagate disposal down the owner tree so child scopes are cleaned up automatically.
+
+### Effect & Binding System (Reactive Tracking)
+- [X] Create binding effects that integrate with owner system for automatic cleanup.
+- [X] Support effect-level cleanups within bindings (run before each re-execution).
+- [X] Generalize effect-based subscriptions across all reactive DOM bindings (text, props, classes, styles, attributes).
+
+### Cleanup & Resource Management (Disposal Mechanism)
+- [X] Track cleanup handles for every binding effect and event listener.
+- [X] Support registerCleanup API for manual resource cleanup within effect and component scopes.
+- [X] Execute all cleanups in reverse order during owner disposal.
+- [X] Dispose all binding effects and event listeners when a component unmounts.
+
+### Lifecycle Hooks (Public API)
+- [X] Implement onMount hook - register callbacks to run after component mount.
+- [X] Implement onUnmount hook - register callbacks to run on component unmount.
+- [X] Support onCleanup inside effects (run before each re-execution, not only on unmount).
+- [X] Execute lifecycle hooks with correct owner context and deterministic order.
+
+### Component & Event Lifecycle (Integration)
+- [X] Auto-cleanup event listeners via registerCleanup on addEventListener.
+- [X] Execute root component onMount callbacks after renderApp completion.
+- [X] Return disposer function from renderApp for manual cleanup and re-rendering.
+
+### Future Enhancements
 - [ ] Support ref prop for accessing DOM elements after mount.
 
 ## Control Flow
@@ -50,3 +71,10 @@
 - [ ] Batch multiple signal-triggered DOM updates in the same microtask.
 - [ ] Implement batching updates to ensure that multiple signal modifications within the same microtask only trigger.
 - [ ] Ensure that updates are applied in the correct order and that any necessary debouncing or batching strategies are implemented to optimize performance.
+
+# Routing
+- [ ] Implement a basic client-side router.
+- [ ] Support route parameters and query strings.
+- [ ] Support nested routes and route guards.
+- [ ] Implement a Link component for navigation.
+- [ ] Support dynamic route matching and route transitions.

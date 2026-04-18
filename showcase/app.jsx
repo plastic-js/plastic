@@ -1,8 +1,10 @@
 import {
-	computed,
+	createComputed,
+	createSignal,
+	onCleanup,
+	onMount,
 	renderApp,
-	signal,
-} from '../src/jsx-runtime.js'
+} from '../src/index.js'
 import './global.css'
 
 // ─── Function Components ──────────────────────────────────────────────────────
@@ -30,14 +32,14 @@ const Tag = ({ children, variant = 'default' })=> (
 )
 
 // Uses a reactive prop to drive a status tag and a metric tile together.
-const taps = signal(0)
-const tapStatus = computed(()=> taps() >= 5 ? 'hot' : taps() >= 2 ? 'warm' : 'cool')
-const tapVariant = computed(()=> taps() >= 5 ? 'danger' : taps() >= 2 ? 'warning' : 'info')
+const taps = createSignal(0)
+const tapStatus = createComputed(()=> taps() >= 5 ? 'hot' : taps() >= 2 ? 'warm' : 'cool')
+const tapVariant = createComputed(()=> taps() >= 5 ? 'danger' : taps() >= 2 ? 'warning' : 'info')
 const incrementTaps = ()=> taps(taps() + 1)
 const resetTaps = ()=> taps(0)
 
-const profileIndex = signal(0)
-const buttonLocked = signal(false)
+const profileIndex = createSignal(0)
+const buttonLocked = createSignal(false)
 
 const profiles = [
 	{
@@ -60,14 +62,14 @@ const profiles = [
 	},
 ]
 
-const activeProfile = computed(()=> profiles[profileIndex()])
-const reactiveLabel = computed(()=> `Current profile: ${activeProfile().name}`)
-const reactiveDescription = computed(()=> `${activeProfile().role} · @${activeProfile().handle}`)
-const badgeLabel = computed(()=> {
+const activeProfile = createComputed(()=> profiles[profileIndex()])
+const reactiveLabel = createComputed(()=> `Current profile: ${activeProfile().name}`)
+const reactiveDescription = createComputed(()=> `${activeProfile().role} · @${activeProfile().handle}`)
+const badgeLabel = createComputed(()=> {
 	return buttonLocked() ? 'Props are locked' : 'Props are live'
 })
-const profileTone = computed(()=> ['tone-amber', 'tone-teal', 'tone-coral'][profileIndex()])
-const profileCardClassName = computed(()=> {
+const profileTone = createComputed(()=> ['tone-amber', 'tone-teal', 'tone-coral'][profileIndex()])
+const profileCardClassName = createComputed(()=> {
 	return [
 		'profile-card',
 		'profile-shell',
@@ -78,8 +80,8 @@ const profileCardClassName = computed(()=> {
 })
 const classSummary = 'Reactive className now directly controls .interactive and .is-locked classes.'
 
-const styleMode = signal('highlight')
-const reactiveStyle = computed(()=> styleMode() === 'highlight'
+const styleMode = createSignal('highlight')
+const reactiveStyle = createComputed(()=> styleMode() === 'highlight'
 	? {
 		background: '#fffbcc',
 		padding: '8px 12px',
@@ -93,8 +95,87 @@ const cycleStyleMode = ()=> {
 	styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')
 }
 
-const autoFocusEnabled = signal(false)
+const autoFocusEnabled = createSignal(false)
 const toggleAutoFocus = ()=> autoFocusEnabled(!autoFocusEnabled())
+
+const lifecycleMountedCount = createSignal(0)
+const lifecycleCleanupCount = createSignal(0)
+const lifecycleProbeMounted = createSignal(false)
+
+const LifecycleProbe = ()=> {
+	const elapsedSeconds = createSignal(0)
+	let timerId = null
+
+	onMount(()=> {
+		lifecycleMountedCount(lifecycleMountedCount() + 1)
+		timerId = setInterval(()=> {
+			elapsedSeconds(elapsedSeconds() + 1)
+		}, 1000)
+	})
+
+	onCleanup(()=> {
+		lifecycleCleanupCount(lifecycleCleanupCount() + 1)
+		if (timerId){
+			clearInterval(timerId)
+		}
+	})
+
+	return (
+		<div className='checklist'>
+			<p>Probe is mounted. The timer below should stop immediately after unmount.</p>
+			<p>
+				Elapsed in probe:
+				{' '}
+				<strong>
+					{elapsedSeconds}
+				</strong>
+				{' '}
+				s
+			</p>
+		</div>
+	)
+}
+
+let lifecycleDisposer = null
+
+const mountLifecycleProbe = ()=> {
+	if (lifecycleDisposer){
+		return
+	}
+
+	const host = document.querySelector('#lifecycle-probe-root')
+	if (!host){
+		return
+	}
+
+	host.textContent = ''
+	lifecycleDisposer = renderApp(host, <LifecycleProbe />)
+	lifecycleProbeMounted(true)
+}
+
+const unmountLifecycleProbe = ()=> {
+	if (!lifecycleDisposer){
+		return
+	}
+
+	lifecycleDisposer()
+	lifecycleDisposer = null
+	lifecycleProbeMounted(false)
+
+	const host = document.querySelector('#lifecycle-probe-root')
+	if (host){
+		host.textContent = 'Probe is unmounted. Mount again to verify onMount + fresh state.'
+	}
+}
+
+const toggleLifecycleProbe = ()=> {
+	if (lifecycleDisposer){
+		unmountLifecycleProbe()
+		return
+	}
+
+	mountLifecycleProbe()
+}
 
 const cycleProfile = ()=> {
 	profileIndex((profileIndex() + 1) % profiles.length)
@@ -131,7 +212,7 @@ const app = (
 			<div
 				aria-label={()=> `Profile card for ${activeProfile().name}`}
 				className={profileCardClassName}
-				title={computed(()=> `${activeProfile().name} · ${activeProfile().role}`)}
+				title={createComputed(()=> `${activeProfile().name} · ${activeProfile().role}`)}
 			>
 				<p className='profile-kicker'>
 					{reactiveDescription}
@@ -140,15 +221,15 @@ const app = (
 					{classSummary}
 				</p>
 				<h3>
-					{computed(()=> activeProfile().name)}
+					{createComputed(()=> activeProfile().name)}
 				</h3>
 				<div className='field-grid'>
-					<label htmlFor={computed(()=> `contact-${activeProfile().handle}`)}>Contact email</label>
+					<label htmlFor={createComputed(()=> `contact-${activeProfile().handle}`)}>Contact email</label>
 					<input
-						id={computed(()=> `contact-${activeProfile().handle}`)}
+						id={createComputed(()=> `contact-${activeProfile().handle}`)}
 						placeholder={()=> `Message ${activeProfile().name}`}
 						readOnly
-						value={computed(()=> activeProfile().email)}
+						value={createComputed(()=> activeProfile().email)}
 					/>
 				</div>
 				<div className='button-row'>
@@ -214,9 +295,46 @@ const app = (
 				<button onClick={toggleAutoFocus} type='button'>
 					Toggle autoFocus (currently:
 					{' '}
-					{computed(()=> (autoFocusEnabled() ? 'on' : 'off'))}
+					{createComputed(()=> (autoFocusEnabled() ? 'on' : 'off'))}
 					)
 				</button>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Lifecycle and dispose</h2>
+			<p className='feature-copy'>
+				This section mounts a separate component tree via
+				{' '}
+				<code>renderApp()</code>
+				{' '}
+				and disposes it using the returned disposer. Use the toggle button to verify
+				{' '}
+				<code>onMount</code>
+				/
+				<code>onCleanup</code>
+				{' '}
+				behavior.
+			</p>
+			<div className='stat-grid'>
+				<StatCard title='Mounted count' value={lifecycleMountedCount} />
+				<StatCard title='Cleanup count' value={lifecycleCleanupCount} />
+			</div>
+			<div className='button-row'>
+				<button onClick={toggleLifecycleProbe} type='button'>
+					{createComputed(()=> lifecycleProbeMounted() ? 'Unmount probe subtree' : 'Mount probe subtree')}
+				</button>
+			</div>
+			<div className='checklist'>
+				<p>
+					Current probe state:
+					{' '}
+					<strong>
+						{createComputed(()=> (lifecycleProbeMounted() ? 'mounted' : 'unmounted'))}
+					</strong>
+				</p>
+			</div>
+			<div className='feature-card' id='lifecycle-probe-root'>
+				Probe is unmounted. Mount to start timer.
 			</div>
 		</section>
 		<section className='feature-card'>
@@ -265,3 +383,4 @@ const app = (
 )
 
 renderApp(document.body.querySelector('.app'), app)
+

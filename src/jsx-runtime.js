@@ -3,6 +3,135 @@ import {
 } from 'alien-signals'
 
 const Fragment = Symbol('Fragment')
+const OWNER = Symbol('owner')
+
+// ============ Owner & Lifecycle Management ============
+// Global context for effect scoping and cleanup tracking
+let currentOwner = null
+let currentComputation = null
+
+const createOwner = (parent = null)=> {
+	const owner = {
+		parent,
+		children: new Set(),
+		cleanups: [],
+		effects: [],
+		mounts: [],
+		mounted: false,
+	}
+	if (parent){
+		parent.children.add(owner)
+	}
+	return owner
+}
+
+const runOwnerMounts = (owner)=> {
+	owner.children.forEach(child=> runOwnerMounts(child))
+	owner.mounts.forEach((fn)=> {
+		fn()
+	})
+	owner.mounted = true
+}
+
+const runWithOwner = (owner, fn)=> {
+	const prev = currentOwner
+	currentOwner = owner
+	try {
+		return fn()
+	} finally {
+		currentOwner = prev
+	}
+}
+
+const disposeOwner = (owner)=> {
+	if (owner.parent){
+		owner.parent.children.delete(owner)
+	}
+
+	// Dispose all child owners recursively
+	owner.children.forEach(child=> disposeOwner(child))
+	owner.children.clear()
+
+	// Stop owner-bound effects for this scope during unmount.
+	;[...owner.effects].reverse().forEach((stop)=> {
+		if (typeof stop === 'function'){
+			stop()
+		}
+	})
+	owner.effects.length = 0
+
+	;[...owner.cleanups].reverse().forEach((cleanup)=> {
+		if (typeof cleanup === 'function'){
+			cleanup()
+		}
+	})
+	owner.cleanups.length = 0
+	owner.mounts.length = 0
+}
+
+// Create a binding effect that integrates with the owner system
+const createBindingEffect = (runner)=> {
+	const owner = currentOwner
+	// effect-level cleanups (run before each re-execution)
+	const local = []
+
+	const stop = effect(()=> {
+		// Run effect-level cleanups in reverse order
+		[...local].reverse().forEach((l)=> {
+			l()
+		})
+		local.length = 0
+
+		// Set up computation context for onCleanup within the effect
+		const prevComp = currentComputation
+		currentComputation = { cleanups: local }
+		runner()
+		currentComputation = prevComp
+	})
+
+	if (!owner){
+		return stop
+	}
+	// Register effect and its disposal in the owner
+	owner.effects.push(stop)
+	owner.cleanups.push(()=> {
+		// Run remaining local cleanups
+		[...local].reverse().forEach((l)=> {
+			l()
+		})
+
+		local.length = 0
+	})
+
+	return stop
+}
+
+const registerCleanup = (fn)=> {
+	if (!currentOwner && !currentComputation){
+		throw new Error('registerCleanup must be called within a component or effect scope')
+	}
+	if (currentComputation){
+		currentComputation.cleanups.push(fn)
+	} else {
+		currentOwner.cleanups.push(fn)
+	}
+}
+
+// Public API: onMount - register function to run after mount
+const onMount = (fn)=> {
+	if (!currentOwner){
+		throw new Error('onMount must be called within a component scope')
+	}
+	currentOwner.mounts.push(fn)
+}
+
+const onUnmount = (fn)=> {
+	if (!currentOwner){
+		throw new Error('onUnmount must be called within a component scope')
+	}
+	currentOwner.cleanups.push(fn)
+}
+
 const isReactivePrimitive = value=> isSignal(value) || isComputed(value)
 const isReactive = value=> isReactivePrimitive(value) || typeof value === 'function'
 const createPlaceholder = ()=> document.createComment('null')
@@ -33,7 +162,7 @@ const normalizeTextNodeValue = (value)=> {
 const createReactiveTextNode = (reactiveValue)=> {
 	const textNode = document.createTextNode('')
 
-	effect(()=> {
+	createBindingEffect(()=> {
 		textNode.data = normalizeTextNodeValue(reactiveValue())
 	})
 
@@ -87,7 +216,7 @@ const applyClassNameMap = (element, classNameMap)=> {
 
 const applyClassProp = (element, value)=> {
 	if (isReactive(value)){
-		effect(()=> {
+		createBindingEffect(()=> {
 			const expectedClass = toClassMap(value())
 			const actualClass = new Set(element.classList)
 			const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
@@ -125,7 +254,7 @@ const clearStyleKey = (element, key)=> {
 const applyStyleProp = (element, value)=> {
 	if (isReactive(value)){
 		let prevKeys = new Set()
-		effect(()=> {
+		createBindingEffect(()=> {
 			const resolved = value()
 			if (typeof resolved === 'string' || resolved == null){
 				element.style.cssText = resolved ?? ''
@@ -155,11 +284,7 @@ const applyStyleProp = (element, value)=> {
 
 const clearDomProp = (element, key)=> {
 	if (key in element){
-		try {
-			element[key] = ''
-		} catch {
-			// Read-only DOM properties still need their attributes cleared.
-		}
+		element[key] = ''
 	}
 
 	element.removeAttribute(key)
@@ -194,7 +319,7 @@ const setDomProp = (element, key, value)=> {
 
 const applyCommonAttribute = (element, key, source)=> {
 	if (isReactive(source)){
-		effect(()=> {
+		createBindingEffect(()=> {
 			setDomProp(element, key, source())
 		})
 		return
@@ -223,6 +348,12 @@ const applyProps = (element, props = {})=> {
 				const eventName = key.slice(2).toLowerCase()
 				if (isSupportedEvent(element, eventName)){
 					element.addEventListener(eventName, value)
+					// Register cleanup to remove event listener if in owner context
+					if (currentOwner || currentComputation){
+						registerCleanup(()=> {
+							element.removeEventListener(eventName, value)
+						})
+					}
 				}
 			}
 			return
@@ -295,9 +426,20 @@ const h = (tag, props, ...children)=> {
 	}
 
 	if (typeof tag === 'function'){
+		// Create an owner for this component instance
+		const owner = createOwner(currentOwner)
+
 		// Function components receive a single props object; children are injected under props.children.
 		const componentProps = { ...nextProps, children: mergedChildren.length === 1 ? mergedChildren[0] : mergedChildren }
-		return tag(componentProps)
+		const result = runWithOwner(owner, ()=> tag(componentProps))
+		const normalized = runWithOwner(owner, ()=> node2Element(result))
+
+		// Attach owner to result for unmount tracking
+		if (normalized instanceof Node){
+			normalized[OWNER] = owner
+		}
+
+		return normalized
 	}
 
 	if (typeof tag !== 'string'){
@@ -313,16 +455,37 @@ const h = (tag, props, ...children)=> {
 
 const jsx = (tag, props)=> h(tag, props)
 const jsxs = (tag, props)=> h(tag, props)
-const onMount = ()=> {}
-const onUnmount = ()=> {}
 
 // Render by appending the normalized root node into the target container.
+// Returns a disposer function that cleans up all effects and listeners.
 const renderApp = (container, node)=> {
-	container.appendChild(node2Element(node))
-	return container
+	const appNode = node2Element(node)
+	container.appendChild(appNode)
+	// Get the owner from the node (set by h() when rendering components)
+	const owner = appNode[OWNER]
+	// Execute root onMount callbacks if owner exists
+	if (owner){
+		runOwnerMounts(owner)
+	}
+
+	// Return a disposer function
+	let disposed = false
+	const dispose = ()=> {
+		if (disposed){ return }
+		disposed = true
+		if (owner){
+			disposeOwner(owner)
+		}
+		if (appNode.parentNode === container){
+			container.removeChild(appNode)
+		}
+	}
+
+	return dispose
 }
 
 export {
+	// Public API
 	Fragment,
 	h,
 	jsx,
@@ -330,9 +493,40 @@ export {
 	onMount,
 	onUnmount,
 	renderApp,
-	signal, computed, effect,
-	// expose some internal utils for testing and advanced use cases, but these are not considered part of the public API and may change without a major version bump.
+	// Internal signal primitives (framework internals/tests)
+	signal,
+	computed,
+	// Owner / lifecycle internals
+	createOwner,
+	runOwnerMounts,
+	runWithOwner,
+	disposeOwner,
+	createBindingEffect,
+	registerCleanup,
+	// Reactive helpers
+	isReactivePrimitive,
+	isReactive,
+	// DOM helpers
+	createPlaceholder,
+	flattenChildren,
+	isEventProp,
+	isSupportedEvent,
+	isBooleanDomProp,
+	JSX_PROP_MAP,
+	normalizeTextNodeValue,
+	createReactiveTextNode,
+	toClassTokens,
+	toClassMap,
+	applyClassNameMap,
+	applyClassProp,
+	applyStyleObject,
+	clearStyleKey,
+	applyStyleProp,
+	clearDomProp,
+	setDomProp,
+	applyCommonAttribute,
+	applyProps,
+	node2Element,
 	appendChild,
 	appendChildren,
-	applyProps,
 }

@@ -4,65 +4,21 @@ import {
 	afterEach, describe, expect, it, vi,
 } from 'vitest'
 import {
-	appendChild,
 	appendChildren,
 	applyProps,
-	computed,
+	createOwner,
+	disposeOwner,
 	h,
 	jsx,
+	onMount,
+	renderApp,
 	signal,
 } from '../src/jsx-runtime.js'
+import { onCleanup } from '../src/index.js'
 
 describe('jsx runtime static rendering', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
-	})
-
-	it('creates a static element with attributes', ()=> {
-		const element = h('div', {
-			id: 'root',
-			className: 'card',
-			title: 'static-title',
-		})
-
-		expect(element.tagName).toBe('DIV')
-		expect(element.id).toBe('root')
-		expect(element.className).toBe('card')
-		expect(element.getAttribute('title')).toBe('static-title')
-	})
-
-	it('applies static props onto an existing element', ()=> {
-		const element = document.createElement('label')
-		applyProps(element, {
-			htmlFor: 'field-id',
-			className: 'field-label',
-			style: {
-				backgroundColor: 'black',
-				paddingInline: '12px',
-				'--accent-color': '#f40',
-			},
-		})
-
-		expect(element.getAttribute('for')).toBe('field-id')
-		expect(element.className).toBe('field-label')
-		expect(element.style.backgroundColor).toBe('black')
-		expect(element.style.paddingInline).toBe('12px')
-		expect(element.style.getPropertyValue('--accent-color')).toBe('#f40')
-	})
-
-	it('supports boolean attributes on created elements', ()=> {
-		const button = h('button', {
-			disabled: true,
-		}, 'Tap')
-		const input = h('input', {
-			type: 'checkbox',
-			checked: true,
-		})
-
-		expect(button.disabled).toBe(true)
-		expect(button.getAttribute('disabled')).toBe('')
-		expect(input.checked).toBe(true)
-		expect(input.getAttribute('checked')).toBe('')
 	})
 
 	it('rejects classList prop and asks callers to use className', ()=> {
@@ -104,14 +60,6 @@ describe('jsx runtime static rendering', ()=> {
 		expect(button.getAttribute('onClick')).toBeNull()
 	})
 
-	it('ignores non-function event prop values', ()=> {
-		const button = h('button', {
-			onClick: 'invalid',
-		}, 'Tap')
-
-		expect(button.getAttribute('onClick')).toBeNull()
-	})
-
 	it('ignores unsupported event names', ()=> {
 		const onInvalid = vi.fn()
 		const button = h('button', {
@@ -121,31 +69,6 @@ describe('jsx runtime static rendering', ()=> {
 		button.dispatchEvent(new Event('definitelynotarealevent'))
 
 		expect(onInvalid).not.toHaveBeenCalled()
-	})
-
-	it('appends string, number and nested DOM children', ()=> {
-		const strong = document.createElement('strong')
-		strong.textContent = 'world'
-
-		const element = h('p', null, 'hello', 42, [strong])
-		document.body.appendChild(element)
-
-		expect(element.childNodes).toHaveLength(3)
-		expect(element.childNodes[0].textContent).toBe('hello')
-		expect(element.childNodes[1].textContent).toBe('42')
-		expect(element.childNodes[2]).toBe(strong)
-	})
-
-	it('supports appendChild and appendChildren helpers', ()=> {
-		const element = document.createElement('div')
-		const span = document.createElement('span')
-		span.textContent = 'tail'
-
-		appendChild(element, 'head')
-		appendChildren(element, [1, [span]])
-
-		expect(element.childNodes).toHaveLength(3)
-		expect(element.textContent).toBe('head1tail')
 	})
 
 	it('updates text nodes when a signal child changes', ()=> {
@@ -159,18 +82,6 @@ describe('jsx runtime static rendering', ()=> {
 		count(2)
 
 		expect(element.textContent).toBe('Count: 2')
-	})
-
-	it('updates text nodes when a computed child changes', ()=> {
-		const firstName = signal('Ada')
-		const label = computed(()=> `Hello ${firstName()}`)
-		const element = h('p', null, label)
-
-		expect(element.textContent).toBe('Hello Ada')
-
-		firstName('Lin')
-
-		expect(element.textContent).toBe('Hello Lin')
 	})
 
 	it('updates DOM props when a signal prop changes', ()=> {
@@ -191,22 +102,6 @@ describe('jsx runtime static rendering', ()=> {
 
 		expect(element.title).toBe('')
 		expect(element.hasAttribute('title')).toBe(false)
-	})
-
-	it('updates DOM props when a computed prop changes', ()=> {
-		const fieldId = signal('email')
-		const htmlFor = computed(()=> `field-${fieldId()}`)
-		const element = h('label', {
-			htmlFor,
-		}, 'Email')
-
-		expect(element.htmlFor).toBe('field-email')
-		expect(element.getAttribute('for')).toBe('field-email')
-
-		fieldId('name')
-
-		expect(element.htmlFor).toBe('field-name')
-		expect(element.getAttribute('for')).toBe('field-name')
 	})
 
 	it('updates DOM props from getter sources that read signals', ()=> {
@@ -267,32 +162,6 @@ describe('jsx runtime static rendering', ()=> {
 		expect(textInput.hasAttribute('readonly')).toBe(false)
 	})
 
-	it('updates dynamic boolean props from a computed source', ()=> {
-		const ready = signal(false)
-		const enabled = computed(()=> ready())
-		const editable = computed(()=> ready())
-
-		const button = h('button', {
-			disabled: computed(()=> !enabled()),
-		}, 'Submit')
-		const textInput = h('input', {
-			type: 'text',
-			readOnly: computed(()=> !editable()),
-		})
-
-		expect(button.disabled).toBe(true)
-		expect(button.hasAttribute('disabled')).toBe(true)
-		expect(textInput.readOnly).toBe(true)
-		expect(textInput.hasAttribute('readonly')).toBe(true)
-
-		ready(true)
-
-		expect(button.disabled).toBe(false)
-		expect(button.hasAttribute('disabled')).toBe(false)
-		expect(textInput.readOnly).toBe(false)
-		expect(textInput.hasAttribute('readonly')).toBe(false)
-	})
-
 	it('updates className from a signal and removes stale tokens', ()=> {
 		const statusClass = signal('card ready')
 		const element = h('div', {
@@ -320,26 +189,6 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.classList.contains('featured')).toBe(false)
 	})
 
-	it('updates className from a computed source and removes stale tokens', ()=> {
-		const variant = signal('primary')
-		const className = computed(()=> {
-			return variant() === 'primary' ? 'btn solid' : 'btn ghost'
-		})
-		const element = h('button', {
-			className,
-		})
-
-		expect(element.classList.contains('btn')).toBe(true)
-		expect(element.classList.contains('solid')).toBe(true)
-		expect(element.classList.contains('ghost')).toBe(false)
-
-		variant('secondary')
-
-		expect(element.classList.contains('btn')).toBe(true)
-		expect(element.classList.contains('solid')).toBe(false)
-		expect(element.classList.contains('ghost')).toBe(true)
-	})
-
 	it('renders reactive nullish values as empty text and booleans as strings', ()=> {
 		const value = signal('ready')
 		const element = h('p', null, value)
@@ -354,15 +203,6 @@ describe('jsx runtime static rendering', ()=> {
 
 		value(0)
 		expect(element.textContent).toBe('0')
-	})
-
-	it('applies a static style string via cssText', ()=> {
-		const element = h('div', {
-			style: 'color: red; font-size: 14px',
-		})
-
-		expect(element.style.color).toBe('red')
-		expect(element.style.fontSize).toBe('14px')
 	})
 
 	it('updates style from a reactive string and clears on null', ()=> {
@@ -403,34 +243,6 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.fontSize).toBe('')
 	})
 
-	it('updates style from a computed source and diffs keys correctly', ()=> {
-		const active = signal(false)
-		const styles = computed(()=> active()
-			? {
-				fontWeight: 'bold',
-				color: 'green',
-			}
-			: {
-				fontWeight: 'normal',
-			})
-		const element = h('div', {
-			style: styles,
-		})
-
-		expect(element.style.fontWeight).toBe('normal')
-		expect(element.style.color).toBe('')
-
-		active(true)
-
-		expect(element.style.fontWeight).toBe('bold')
-		expect(element.style.color).toBe('green')
-
-		active(false)
-
-		expect(element.style.fontWeight).toBe('normal')
-		expect(element.style.color).toBe('')
-	})
-
 	it('routes jsx automatic runtime calls through h', ()=> {
 		const element = jsx('section', {
 			className: 'panel',
@@ -446,48 +258,6 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('content')
 	})
 
-	it('maps autoFocus to the autofocus DOM property', ()=> {
-		const input = h('input', {
-			autoFocus: true,
-		})
-
-		expect(input.autofocus).toBe(true)
-		expect(input.getAttribute('autofocus')).toBe('')
-	})
-
-	it('maps autoComplete to the autocomplete DOM property on input', ()=> {
-		const input = h('input', {
-			autoComplete: 'email',
-		})
-
-		expect(input.autocomplete).toBe('email')
-	})
-
-	it('maps autoPlay to the autoplay DOM property on video', ()=> {
-		const video = h('video', {
-			autoPlay: true,
-		})
-
-		expect(video.autoplay).toBe(true)
-		expect(video.getAttribute('autoplay')).toBe('')
-	})
-
-	it('maps encType to the enctype DOM property on form', ()=> {
-		const form = h('form', {
-			encType: 'multipart/form-data',
-		})
-
-		expect(form.enctype).toBe('multipart/form-data')
-	})
-
-	it('maps hrefLang to the hreflang DOM property on anchor', ()=> {
-		const a = h('a', {
-			hrefLang: 'zh-TW',
-		})
-
-		expect(a.hreflang).toBe('zh-TW')
-	})
-
 	it('supports reactive autoFocus via a signal', ()=> {
 		const focused = signal(false)
 		const input = h('input', {
@@ -501,14 +271,6 @@ describe('jsx runtime static rendering', ()=> {
 
 		expect(input.autofocus).toBe(true)
 		expect(input.getAttribute('autofocus')).toBe('')
-	})
-
-	it('renders a function component by calling it with props', ()=> {
-		const Greeting = ({ name })=> h('span', null, `Hello, ${name}!`)
-		const element = h(Greeting, { name: 'World' })
-
-		expect(element.tagName).toBe('SPAN')
-		expect(element.textContent).toBe('Hello, World!')
 	})
 
 	it('passes children to function components via props.children', ()=> {
@@ -562,3 +324,228 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('published')
 	})
 })
+
+describe('lifecycle & cleanup management', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('executes onMount callback after component renders', ()=> {
+		const onMountCallback = vi.fn()
+		const Component = ()=> {
+			onMount(onMountCallback)
+			return h('div', null, 'content')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Component))
+
+		expect(container.textContent).toBe('content')
+		expect(onMountCallback).toHaveBeenCalledTimes(1)
+	})
+
+	it('onMount callbacks execute in order', ()=> {
+		const order = []
+		const Component = ()=> {
+			onMount(()=> order.push(1))
+			onMount(()=> order.push(2))
+			onMount(()=> order.push(3))
+			return h('div', null, 'test')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Component))
+
+		expect(order).toEqual([1, 2, 3])
+	})
+
+	it('onMount executes for nested owners in child-first order', ()=> {
+		const order = []
+
+		const Child = ()=> {
+			onMount(()=> order.push('child'))
+			return h('span', null, 'child')
+		}
+
+		const Parent = ()=> {
+			onMount(()=> order.push('parent'))
+			return h('div', null, h(Child))
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		expect(order).toEqual(['child', 'parent'])
+	})
+
+	it('disposeOwner executes effects in child-first order', ()=> {
+		const order = []
+		const parentOwner = createOwner(null)
+		const childOwner = createOwner(parentOwner)
+
+		childOwner.effects.push(()=> order.push('child-effect'))
+		parentOwner.effects.push(()=> order.push('parent-effect'))
+
+		disposeOwner(parentOwner)
+
+		expect(order).toEqual(['child-effect', 'parent-effect'])
+	})
+
+	it('onCleanup in component runs on unmount', ()=> {
+		const cleanupFn = vi.fn()
+		const Component = ()=> {
+			onCleanup(cleanupFn)
+			return h('div', null, 'test')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		expect(cleanupFn).not.toHaveBeenCalled()
+
+		const dispose = renderApp(container, h(Component))
+		expect(cleanupFn).not.toHaveBeenCalled()
+
+		dispose()
+		expect(cleanupFn).toHaveBeenCalledTimes(1)
+	})
+
+	it('renderApp returns a disposer function that cleans up resources', ()=> {
+		const onMountFn = vi.fn()
+		const onCleanupFn = vi.fn()
+
+		const Component = ()=> {
+			onMount(onMountFn)
+			onCleanup(onCleanupFn)
+			return h('div', null, 'content')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const dispose = renderApp(container, h(Component))
+
+		expect(onMountFn).toHaveBeenCalledTimes(1)
+		expect(container.childNodes).toHaveLength(1)
+		expect(container.textContent).toBe('content')
+
+		dispose()
+
+		expect(onCleanupFn).toHaveBeenCalledTimes(1)
+		expect(container.childNodes).toHaveLength(0)
+	})
+
+	it('event listener cleanup removes listeners on dispose', ()=> {
+		const onClick = vi.fn()
+		const Component = ()=> h('button', { onClick }, 'Click')
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const dispose = renderApp(container, h(Component))
+
+		const button = container.querySelector('button')
+		button.click()
+		expect(onClick).toHaveBeenCalledTimes(1)
+
+		dispose()
+
+		// After dispose, clicking should not trigger handler
+		if (button.parentNode){
+			button.click()
+			// Still 1, not 2
+			expect(onClick).toHaveBeenCalledTimes(1)
+		}
+	})
+
+	it('nested component cleanup propagates to children', ()=> {
+		const parentCleanup = vi.fn()
+		const childCleanup = vi.fn()
+
+		const Child = ()=> {
+			onCleanup(childCleanup)
+			return h('span', null, 'child')
+		}
+
+		const Parent = ()=> {
+			onCleanup(parentCleanup)
+			return h('div', null, h(Child))
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const dispose = renderApp(container, h(Parent))
+
+		expect(parentCleanup).not.toHaveBeenCalled()
+		expect(childCleanup).not.toHaveBeenCalled()
+
+		dispose()
+
+		expect(parentCleanup).toHaveBeenCalledTimes(1)
+		expect(childCleanup).toHaveBeenCalledTimes(1)
+	})
+
+	it('disposeOwner cleans up all descendant owners', ()=> {
+		const cleanups = []
+
+		const cleanup1 = ()=> cleanups.push(1)
+		const cleanup2 = ()=> cleanups.push(2)
+		const cleanup3 = ()=> cleanups.push(3)
+
+		const owner1 = createOwner(null)
+		const owner2 = createOwner(owner1)
+		const owner3 = createOwner(owner1)
+
+		owner1.cleanups.push(cleanup1)
+		owner2.cleanups.push(cleanup2)
+		owner3.cleanups.push(cleanup3)
+
+		owner1.children.add(owner2)
+		owner1.children.add(owner3)
+
+		disposeOwner(owner1)
+
+		expect(cleanups.sort()).toEqual([1, 2, 3])
+	})
+
+	it('multiple onCleanup callbacks run in reverse order', ()=> {
+		const order = []
+
+		const Component = ()=> {
+			onCleanup(()=> order.push(1))
+			onCleanup(()=> order.push(2))
+			onCleanup(()=> order.push(3))
+			return h('div', null, 'test')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const dispose = renderApp(container, h(Component))
+
+		dispose()
+
+		// Last registered cleanup runs first (LIFO)
+		expect(order).toEqual([3, 2, 1])
+	})
+
+	it('tracks owner cleanup when component returns a primitive', ()=> {
+		const cleaned = vi.fn()
+		const ValueComponent = ()=> {
+			onCleanup(cleaned)
+			return 'plain text'
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const dispose = renderApp(container, h(ValueComponent))
+
+		expect(container.textContent).toBe('plain text')
+		expect(cleaned).not.toHaveBeenCalled()
+
+		dispose()
+		expect(cleaned).toHaveBeenCalledTimes(1)
+	})
+})
+

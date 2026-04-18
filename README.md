@@ -11,6 +11,21 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - **Style objects** — pass a plain object to the `style` prop, including CSS custom properties.
 - **Fragment support** — return multiple root nodes without a wrapper element.
 
+## Lifecycle Semantics
+
+- `onMount` callbacks run in **child-first** order for nested component trees.
+- Component unmount also follows **child-first** order.
+- During unmount, owner-scoped `effects` are stopped before owner cleanups are flushed, so reactive subscriptions and event bindings are disposed predictably.
+
+## Current Runtime Coverage
+
+- **Reactive DOM props**: signals, computed values, and getter sources can drive common DOM props (for example `value`, `title`, `disabled`, `placeholder`) through a shared binding path.
+- **Reactive `className`**: class tokens are added and removed incrementally so stale class names are cleaned up when state changes.
+- **Reactive `style` object**: style keys are diffed by key; removed keys are cleared from the element to avoid stale inline styles.
+- **JSX-to-DOM prop normalization**: camelCase JSX props like `autoFocus`, `autoComplete`, `autoPlay`, `encType`, and `hrefLang` are normalized to the browser-exposed DOM keys before apply.
+- **Mount/dispose API**: `renderApp(container, node)` returns an idempotent disposer that unmounts DOM and disposes owner/effect scopes.
+- **Lifecycle hooks**: `onMount` and cleanup registration (`onCleanup` wrapper) are available for component-level setup and teardown.
+
 ## Getting Started
 
 ### Prerequisites
