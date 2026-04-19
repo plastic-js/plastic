@@ -110,6 +110,20 @@ const toggleProbe = ()=> {
 	}
 }
 
+// ─── Reactive Ternary ─────────────────────────────────────────────────────────
+
+const ternaryVisible = createSignal(true)
+const ternaryTheme = createSignal('day')
+const ternaryPanelStyle = createComputed(()=> {
+	if (!ternaryVisible()){ return { display: 'none' } }
+	return {
+		padding: '12px 16px',
+		background: ternaryTheme() === 'day' ? '#fffbcc' : '#1e1e2e',
+		color: ternaryTheme() === 'day' ? '#333' : '#cdd6f4',
+		borderRadius: '6px',
+	}
+})
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 const app = (
@@ -167,6 +181,44 @@ const app = (
 					<button onClick={()=> styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')} type='button'>Switch style</button>
 					<button disabled={locked} type='button'>Reactive disabled</button>
 				</div>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Reactive ternary</h2>
+			<p className='feature-copy'>
+				The Babel plugin wraps inline ternaries in arrow functions automatically, so they
+				react to signal changes without a manual
+				{' '}
+				<code>createComputed</code>
+				{' '}
+				call.
+			</p>
+			<div className='checklist'>
+				<p>
+					Panel:
+					{' '}
+					<strong>
+						{ternaryVisible() ? 'visible' : 'hidden'}
+					</strong>
+				</p>
+				<p>
+					Theme:
+					{' '}
+					<strong>
+						{ternaryTheme() === 'day' ? 'Day' : 'Night'}
+					</strong>
+				</p>
+			</div>
+			<div style={ternaryPanelStyle}>
+				{ternaryTheme() === 'day' ? 'Bright day panel — switch theme or hide me.' : 'Dark night panel — switch theme or hide me.'}
+			</div>
+			<div className='button-row'>
+				<button onClick={()=> ternaryVisible(!ternaryVisible())} type='button'>
+					{ternaryVisible() ? 'Hide panel' : 'Show panel'}
+				</button>
+				<button onClick={()=> ternaryTheme(ternaryTheme() === 'day' ? 'night' : 'day')} type='button'>
+					{ternaryTheme() === 'day' ? 'Switch to night' : 'Switch to day'}
+				</button>
 			</div>
 		</section>
 		<section className='feature-card'>

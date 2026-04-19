@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import babel from 'vite-plugin-babel'
 import path from 'path'
+import babelPlastic from './build/babel-plugin-transform-ternary.js'
 
 export default defineConfig({
 	root: 'showcase',
@@ -16,6 +17,7 @@ export default defineConfig({
 						},
 					],
 				],
+				plugins: [babelPlastic],
 			},
 		}),
 	],

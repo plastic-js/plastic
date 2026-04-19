@@ -56,6 +56,9 @@
 ### Future Enhancements
 - [ ] Support ref prop for accessing DOM elements after mount.
 
+## Babel Plugin for JSX Transformation
+- [X] Implement a Babel plugin to transform JSX ternary syntax into JavaScript function calls.
+
 ## Control Flow
 - [ ] Implement conditional rendering.
 - [ ] Implement <Show> component.
