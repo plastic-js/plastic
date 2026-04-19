@@ -24,7 +24,11 @@ export default [
 		rules: {
 			'react/prop-types': 0,
 			'react/button-has-type': 0,
-			'@stylistic/js/no-extra-parens': ['error', 'all', { ignoreJSX: 'all' }],
+			'react/no-multi-comp': [2, { ignoreStateless: true }],
+			// framework-specific  
+			'react/destructuring-assignment': [2, 'always', { ignoreClassFields: true }],
+			'@stylistic/js/no-extra-parens': [2, 'all', { ignoreJSX: 'all' }],
+			'@stylistic/js/no-confusing-arrow': [2, { onlyOneSimpleParam: true }],
 		},
 	},
 ]
