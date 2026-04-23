@@ -1,5 +1,8 @@
 import {
+	False,
 	Fragment,
+	If,
+	True,
 	computed,
 	createBindingEffect,
 	h,
@@ -11,18 +14,19 @@ import {
 	signal,
 } from './jsx-runtime.js'
 
-const createEffect = fn=> createBindingEffect(fn)
-const onCleanup = fn=> registerCleanup(fn)
-
 export {
+	False,
 	Fragment,
+	If,
+	True,
 	h,
 	jsx,
 	jsxs,
 	onMount,
-	onCleanup,
+	registerCleanup as onCleanup,
 	renderApp,
-	createEffect,
+	createBindingEffect as createEffect,
+	signal as createSignal,
+	computed as createComputed,
 }
 
-export { signal as createSignal, computed as createComputed }
