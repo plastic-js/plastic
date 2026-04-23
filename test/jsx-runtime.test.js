@@ -3,7 +3,11 @@
 import {
 	afterEach, describe, expect, it, vi,
 } from 'vitest'
+import { transformSync } from '@babel/core'
 import {
+	False,
+	If,
+	True,
 	appendChildren,
 	applyProps,
 	createOwner,
@@ -15,6 +19,8 @@ import {
 	signal,
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
+import transformIfPlugin from '../build/babel-plugin-transform-if.js'
+import transformTernaryPlugin from '../build/babel-plugin-transform-ternary.js'
 
 describe('jsx runtime static rendering', ()=> {
 	afterEach(()=> {
@@ -546,6 +552,132 @@ describe('lifecycle & cleanup management', ()=> {
 
 		dispose()
 		expect(cleaned).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe('control flow: If and mountDynamic', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('switches branches reactively and disposes previous branch owner', ()=> {
+		const showA = signal(true)
+		const mountA = vi.fn()
+		const cleanupA = vi.fn()
+		const mountB = vi.fn()
+		const cleanupB = vi.fn()
+
+		const BranchA = ()=> {
+			onMount(mountA)
+			onCleanup(cleanupA)
+			return h('p', null, 'A')
+		}
+
+		const BranchB = ()=> {
+			onMount(mountB)
+			onCleanup(cleanupB)
+			return h('p', null, 'B')
+		}
+
+		const App = ()=> h('section', null, h(If, {
+			condition: showA,
+			trueBranch: ()=> h(True, null, h(BranchA)),
+			falseBranch: ()=> h(False, null, h(BranchB)),
+		}))
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const dispose = renderApp(container, h(App))
+
+		expect(container.textContent).toContain('A')
+		expect(mountA).toHaveBeenCalledTimes(1)
+		expect(cleanupA).toHaveBeenCalledTimes(0)
+		expect(mountB).toHaveBeenCalledTimes(0)
+
+		showA(false)
+
+		expect(container.textContent).toContain('B')
+		expect(container.textContent).not.toContain('A')
+		expect(cleanupA).toHaveBeenCalledTimes(1)
+		expect(mountB).toHaveBeenCalledTimes(1)
+		expect(cleanupB).toHaveBeenCalledTimes(0)
+
+		dispose()
+		expect(cleanupB).toHaveBeenCalledTimes(1)
+	})
+
+	it('supports trueBranch/falseBranch props', ()=> {
+		const visible = signal(true)
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		renderApp(container, h(If, {
+			condition: visible,
+			trueBranch: ()=> h('span', null, 'LegacyTrue'),
+			falseBranch: ()=> h('span', null, 'LegacyFalse'),
+		}))
+
+		expect(container.textContent).toContain('LegacyTrue')
+
+		visible(false)
+		expect(container.textContent).toContain('LegacyFalse')
+	})
+})
+
+describe('babel plugin: If slot lazy transform', ()=> {
+	it('rewrites <If><True/><False/></If> children into trueBranch/falseBranch factory props', ()=> {
+		const source = `
+			const view = (
+				<If condition={flag()}>
+					<True><p>A</p></True>
+					<False><p>B</p></False>
+				</If>
+			)
+		`
+
+		const transformed = transformSync(source, {
+			configFile: false,
+			babelrc: false,
+			presets: [[
+				'@babel/preset-react',
+				{
+					runtime: 'automatic',
+					importSource: 'jsx',
+				},
+			]],
+			plugins: [transformIfPlugin],
+		})
+
+		const code = transformed?.code ?? ''
+
+		expect(code).toContain('trueBranch: () =>')
+		expect(code).toContain('falseBranch: () =>')
+		expect(code).not.toContain('children: [')
+	})
+})
+
+describe('babel plugin: ternary lazy transform', ()=> {
+	it('wraps JSX ternary expressions in a lazy factory function', ()=> {
+		const source = `
+			const view = <section>{flag() ? <p>A</p> : <p>B</p>}</section>
+		`
+
+		const transformed = transformSync(source, {
+			configFile: false,
+			babelrc: false,
+			presets: [[
+				'@babel/preset-react',
+				{
+					runtime: 'automatic',
+					importSource: 'jsx',
+				},
+			]],
+			plugins: [transformTernaryPlugin],
+		})
+
+		const code = transformed?.code ?? ''
+
+		expect(code).toContain('children: () => flag() ?')
 	})
 })
 

@@ -60,13 +60,32 @@
 - [X] Implement a Babel plugin to transform JSX ternary syntax into JavaScript function calls.
 
 ## Control Flow
-- [ ] Implement conditional rendering.
-- [ ] Implement <Show> component.
-- [ ] Ternary expressions.
-- [ ] Use comment nodes as anchors for dynamic content insertion.
-- [ ] Implement list rendering.
-- [ ] Support rendering lists using tag names (e.g., <For> or <Map>).
-- [ ] Implement a reconciliation algorithm for list rendering (e.g., using keys to optimize node reuse).
+
+### Foundation
+- [X] Implement `mountDynamic(anchor, getContent)` primitive — reactive branch switching via comment-node anchors, owner disposal, and onMount coordination.
+
+### `<If>` Conditional Rendering
+- [X] Implement `<If condition={...}>` with `<True>` and `<False>` slot components.
+- [X] Extend Babel plugin to lazily transform `<True>`/`<False>` children into `_true`/`_false` factory props, preventing eager evaluation of the inactive branch.
+- [X] Dispose previous branch owner and remove its DOM nodes when condition changes.
+- [X] Call `runOwnerMounts` for newly activated branches when anchor is already in the live DOM.
+
+### `<For>` List Rendering
+- [ ] Implement `<For each={items}>{(item, index) => <Row />}</For>` with a render-function child.
+- [ ] Step A: Non-keyed — diff by length, append new items, dispose+remove trailing items.
+- [ ] Step B: Keyed reconciliation — cache `key → { owner, nodes }` to reuse unchanged items; only create/destroy what changed.
+- [ ] Support `key` prop (string accessor) or `key` callback `(item) => id` on `<For>`.
+- [ ] Dispose item owners and remove their nodes when items are removed from the list.
+
+### `<Switch>` Multi-branch Rendering
+- [ ] Implement `<Switch>` with `<Case when={...}>` and `<Default>` slot components.
+- [ ] Support value-match style: `<Switch value={x}><Case match="a">…</Case></Switch>`.
+- [ ] Extend Babel plugin to lazily wrap `<Case>`/`<Default>` children as factory props.
+- [ ] Built on the same `mountDynamic` primitive as `<If>`.
+
+### Extras
+- [ ] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
+- [ ] `<Dynamic component={tag}>` — select component or HTML tag dynamically at runtime.
 - [ ] Guarantee deterministic update order between parent effects and child effects.
 
 ## Performance Optimization

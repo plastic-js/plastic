@@ -1,4 +1,7 @@
 import {
+	False,
+	If,
+	True,
 	createComputed,
 	createSignal,
 	onCleanup,
@@ -47,10 +50,11 @@ const locked = createSignal(false)
 const styleMode = createSignal('highlight')
 
 const cardClass = createComputed(()=> ['profile-card', locked() ? 'is-locked' : 'interactive'].join(' '))
-
-const reactiveStyle = createComputed(()=> (styleMode() === 'highlight'		? {
- background: '#fffbcc', padding: '8px 12px', borderLeft: '3px solid #f0c040' 
-}		: { background: '#e8f5e9', padding: '8px 12px' }),)
+const obj1 = {
+	background: '#fffbcc', padding: '8px 12px', borderLeft: '3px solid #f0c040',
+}
+const obj2 = { background: '#e8f5e9', padding: '8px 12px' }
+const reactiveStyle = createComputed(()=> styleMode() === 'highlight' ? obj1 : obj2)
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -123,6 +127,11 @@ const ternaryPanelStyle = createComputed(()=> {
 		borderRadius: '6px',
 	}
 })
+
+// ─── If / True / False Control Flow ─────────────────────────────────────────
+
+const ifVisible = createSignal(false)
+const ifPlan = createSignal('starter')
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -218,6 +227,66 @@ const app = (
 				</button>
 				<button onClick={()=> ternaryTheme(ternaryTheme() === 'day' ? 'night' : 'day')} type='button'>
 					{ternaryTheme() === 'day' ? 'Switch to night' : 'Switch to day'}
+				</button>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Control flow with If</h2>
+			<p className='feature-copy'>
+				Use
+				{' '}
+				<code>&lt;If&gt;</code>
+				{' '}
+				with
+				{' '}
+				<code>&lt;True&gt;</code>
+				/
+				<code>&lt;False&gt;</code>
+				{' '}
+				to lazily render only the active branch.
+			</p>
+			<div className='checklist'>
+				<p>
+					Active branch:
+					{' '}
+					<strong>
+						{createComputed(()=> ifVisible() ? 'True' : 'False')}
+					</strong>
+				</p>
+				<p>
+					Selected plan:
+					{' '}
+					<strong>
+						{ifPlan}
+					</strong>
+				</p>
+			</div>
+			<If condition={ifVisible}>
+				<True>
+					<div className='checklist'>
+						<p>Welcome back! You can now access the dashboard branch.</p>
+						<p>
+							Current perks:
+							{' '}
+							<strong>
+								{createComputed(()=> ifPlan() === 'pro' ? 'Priority support + analytics' : 'Starter toolkit')}
+							</strong>
+						</p>
+					</div>
+				</True>
+				<False>
+					<div className='checklist'>
+						<p>You are viewing the public branch.</p>
+						<p>Flip the toggle to mount the private branch content.</p>
+					</div>
+				</False>
+			</If>
+			<div className='button-row'>
+				<button onClick={()=> ifVisible(!ifVisible())} type='button'>
+					{createComputed(()=> ifVisible() ? 'Switch to False branch' : 'Switch to True branch')}
+				</button>
+				<button onClick={()=> ifPlan(ifPlan() === 'starter' ? 'pro' : 'starter')} type='button'>
+					{createComputed(()=> ifPlan() === 'starter' ? 'Upgrade to pro' : 'Downgrade to starter')}
 				</button>
 			</div>
 		</section>

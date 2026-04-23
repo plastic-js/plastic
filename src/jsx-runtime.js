@@ -412,6 +412,99 @@ const appendChildren = (parent, children)=> {
 	return parent
 }
 
+// ============ Control Flow Primitives ============
+
+// Reactively replaces DOM content after a comment anchor.
+// getContent() is called inside a binding effect — any signals it reads
+// will trigger a branch switch when they change.
+// On each switch: the previous branch owner is disposed (cleaning up all its
+// effects and event listeners), its DOM nodes are removed, and the new branch
+// is rendered in a fresh child owner.
+const mountDynamic = (anchor, getContent)=> {
+	let prevNodes = []
+	let prevOwner = null
+	// Capture the If component's owner at call time so branch owners are always
+	// parented correctly even when the effect re-runs outside component context.
+	const hostOwner = currentOwner
+
+	const update = ()=> {
+		if (prevOwner){
+			disposeOwner(prevOwner)
+			prevOwner = null
+		}
+		prevNodes.forEach(n=> n.remove())
+		prevNodes = []
+
+		const owner = createOwner(hostOwner)
+		const result = runWithOwner(owner, getContent)
+		const node = runWithOwner(owner, ()=> node2Element(result ?? null))
+
+		// Collect child refs before insertion: DocumentFragment drains on append
+		if (node instanceof DocumentFragment){
+			prevNodes = [...node.childNodes]
+		} else {
+			prevNodes = [node]
+		}
+
+		anchor.after(node)
+		prevOwner = owner
+
+		// For reactive updates (anchor already in live DOM), trigger mount hooks now.
+		// For the initial render, renderApp will call runOwnerMounts on the full tree.
+		if (anchor.isConnected){
+			runOwnerMounts(owner)
+		}
+	}
+
+	const stop = createBindingEffect(update)
+
+	return ()=> {
+		if (typeof stop === 'function'){
+			stop()
+		}
+		if (prevOwner){
+			disposeOwner(prevOwner)
+			prevOwner = null
+		}
+		prevNodes.forEach(n=> n.remove())
+		prevNodes = []
+	}
+}
+
+// <True> and <False> are transparent slot markers — they pass children through.
+// The Babel plugin wraps them in lazy arrow functions before If ever sees them,
+// so the inactive branch is never evaluated until needed.
+const True = ({ children })=> children
+const False = ({ children })=> children
+
+// <If condition={...}>
+//   <True>…</True>
+//   <False>…</False>
+// </If>
+//
+// The Babel plugin transforms this into:
+//   <If condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />
+// so branches are only rendered when active.
+const If = ({
+	condition, trueBranch, falseBranch,
+})=> {
+	const anchor = document.createComment('if')
+	// Return a fragment so the anchor and initial branch content land in the
+	// parent as siblings. anchor.after() keeps working once in the live DOM.
+	const fragment = document.createDocumentFragment()
+	fragment.appendChild(anchor)
+	const activeTrue = trueBranch
+	const activeFalse = falseBranch
+
+	mountDynamic(anchor, ()=> {
+		const cond = typeof condition === 'function' ? condition() : condition
+		const branch = cond ? activeTrue : activeFalse
+		return branch ? branch() : null
+	})
+
+	return fragment
+}
+
 const h = (tag, props, ...children)=> {
 	const nextProps = props || {}
 	const propChildren = nextProps.children ?? []
@@ -529,4 +622,9 @@ export {
 	node2Element,
 	appendChild,
 	appendChildren,
+	// Control flow
+	mountDynamic,
+	If,
+	True,
+	False,
 }
