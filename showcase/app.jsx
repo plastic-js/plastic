@@ -1,5 +1,6 @@
 import {
 	False,
+	For,
 	If,
 	True,
 	createComputed,
@@ -132,6 +133,49 @@ const ternaryPanelStyle = createComputed(()=> {
 
 const ifVisible = createSignal(false)
 const ifPlan = createSignal('starter')
+
+// ─── For List Rendering ─────────────────────────────────────────────────────
+
+const createForSeed = ()=> [
+	{ id: 'a', label: 'Alpha' },
+	{ id: 'b', label: 'Beta' },
+	{ id: 'c', label: 'Gamma' },
+]
+
+const forItems = createSignal(createForSeed())
+const forEpoch = createSignal(0)
+const bumpForEpoch = ()=> forEpoch(forEpoch() + 1)
+
+const addForItem = ()=> {
+	const nextIndex = forItems().length + 1
+	forItems([
+		...forItems(),
+		{ id: `n-${Date.now()}-${nextIndex}`, label: `New ${nextIndex}` },
+	])
+	bumpForEpoch()
+}
+
+const removeLastForItem = ()=> {
+	if (!forItems().length){
+		return
+	}
+	forItems(forItems().slice(0, -1))
+	bumpForEpoch()
+}
+
+const rotateForItems = ()=> {
+	const list = forItems()
+	if (list.length < 2){
+		return
+	}
+	forItems([list[list.length - 1], ...list.slice(0, -1)])
+	bumpForEpoch()
+}
+
+const resetForItems = ()=> {
+	forItems(createForSeed())
+	bumpForEpoch()
+}
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -288,6 +332,63 @@ const app = (
 				<button onClick={()=> ifPlan(ifPlan() === 'starter' ? 'pro' : 'starter')} type='button'>
 					{createComputed(()=> ifPlan() === 'starter' ? 'Upgrade to pro' : 'Downgrade to starter')}
 				</button>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Control flow with For</h2>
+			<p className='feature-copy'>
+				Use
+				{' '}
+				<code>
+					&lt;For each=
+					{'{'}
+					items
+					{'}'}
+					&gt;
+				</code>
+				{' '}
+				for list rendering with an
+				{' '}
+				<code>index()</code>
+				{' '}
+				accessor. This demo also uses
+				{' '}
+				<code>
+					key=
+					{'{(item) => item.id}'}
+				</code>
+				{' '}
+				to keep stable rows when reordering.
+			</p>
+			<div className='checklist'>
+				<p>
+					Total rows:
+					{' '}
+					<strong>
+						{createComputed(()=> forItems().length)}
+					</strong>
+				</p>
+				<p>Try "Rotate" to see keyed rows move without remounting unchanged items.</p>
+			</div>
+			<ul className='checklist'>
+				<For each={forItems} key={item=> `${forEpoch()}-${item.id}`}>
+					{(item, index)=> (
+						<li>
+							#
+							{index}
+							{' '}
+							-
+							{' '}
+							{item.label}
+						</li>
+					)}
+				</For>
+			</ul>
+			<div className='button-row'>
+				<button onClick={addForItem} type='button'>Add row</button>
+				<button onClick={removeLastForItem} type='button'>Remove last</button>
+				<button onClick={rotateForItems} type='button'>Rotate</button>
+				<button onClick={resetForItems} type='button'>Reset</button>
 			</div>
 		</section>
 		<section className='feature-card'>

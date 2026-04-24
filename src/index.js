@@ -1,5 +1,6 @@
 import {
 	False,
+	For,
 	Fragment,
 	If,
 	True,
@@ -16,6 +17,7 @@ import {
 
 export {
 	False,
+	For,
 	Fragment,
 	If,
 	True,

@@ -436,8 +436,11 @@ const mountDynamic = (anchor, getContent)=> {
 		prevNodes = []
 
 		const owner = createOwner(hostOwner)
+		const prevComp = currentComputation
+		currentComputation = null
 		const result = runWithOwner(owner, getContent)
 		const node = runWithOwner(owner, ()=> node2Element(result ?? null))
+		currentComputation = prevComp
 
 		// Collect child refs before insertion: DocumentFragment drains on append
 		if (node instanceof DocumentFragment){
@@ -505,6 +508,141 @@ const If = ({
 	return fragment
 }
 
+// <For each={items}>{(item, index) => ...}</For>
+//
+// Rows are tracked by identity (object reference / primitive value).
+const For = ({
+	each,
+	children,
+})=> {
+	const anchor = document.createComment('for')
+	const fragment = document.createDocumentFragment()
+	fragment.appendChild(anchor)
+
+	const hostOwner = currentOwner
+	let rows = []
+
+	const resolveList = ()=> {
+		const list = typeof each === 'function' ? each() : each
+		return Array.isArray(list) ? list : []
+	}
+
+	const renderRow = (item, indexValue)=> {
+		const owner = createOwner(hostOwner)
+		const indexSignal = signal(indexValue)
+		const prevComp = currentComputation
+		currentComputation = null
+		const result = runWithOwner(owner, ()=> {
+			if (typeof children !== 'function'){
+				return null
+			}
+
+			return children(item, indexSignal)
+		})
+		const node = runWithOwner(owner, ()=> node2Element(result))
+		currentComputation = prevComp
+		const nodes = node instanceof DocumentFragment ? [...node.childNodes] : [node]
+
+		return {
+			owner,
+			indexSignal,
+			nodes,
+		}
+	}
+
+	const mountRows = (nextRows)=> {
+		const nodeFragment = document.createDocumentFragment()
+		nextRows.forEach((row)=> {
+			row.nodes.forEach((node)=> {
+				nodeFragment.appendChild(node)
+			})
+		})
+		anchor.before(nodeFragment)
+	}
+
+	const reconcileRows = (nextItems)=> {
+		const prevRows = rows
+		const nextRows = new Array(nextItems.length)
+		const createdRows = []
+		const reusedPrevIndices = new Set()
+
+		// Build lookup: identity → [prevIndex, ...] (buckets handle duplicates).
+		const prevRowsByIdentity = new Map()
+		prevRows.forEach((row, prevIndex)=> {
+			const bucket = prevRowsByIdentity.get(row.identity)
+			if (bucket){
+				bucket.push(prevIndex)
+			} else {
+				prevRowsByIdentity.set(row.identity, [prevIndex])
+			}
+		})
+
+		// Match existing rows by identity.
+		nextItems.forEach((item, nextIndex)=> {
+			const bucket = prevRowsByIdentity.get(item)
+			if (!bucket || bucket.length === 0){
+				return
+			}
+
+			const prevIndex = bucket.shift()
+			nextRows[nextIndex] = prevRows[prevIndex]
+			reusedPrevIndices.add(prevIndex)
+		})
+
+		// Create missing rows.
+		for (let nextIndex = 0; nextIndex < nextRows.length; nextIndex++){
+			const row = nextRows[nextIndex]
+			if (row){
+				row.indexSignal(nextIndex)
+				continue
+			}
+
+			const created = renderRow(nextItems[nextIndex], nextIndex)
+			created.identity = nextItems[nextIndex]
+			nextRows[nextIndex] = created
+			createdRows.push(created)
+		}
+
+		// Dispose rows that were not reused.
+		prevRows.forEach((row, prevIndex)=> {
+			if (reusedPrevIndices.has(prevIndex)){
+				return
+			}
+
+			disposeOwner(row.owner)
+			row.nodes.forEach(node=> node.remove())
+		})
+
+		rows = nextRows
+		mountRows(rows)
+
+		if (anchor.isConnected){
+			createdRows.forEach((row)=> {
+				runOwnerMounts(row.owner)
+			})
+		}
+	}
+
+	const stop = createBindingEffect(()=> {
+		const nextItems = resolveList()
+		reconcileRows(nextItems)
+	})
+
+	registerCleanup(()=> {
+		if (typeof stop === 'function'){
+			stop()
+		}
+
+		rows.forEach((row)=> {
+			disposeOwner(row.owner)
+			row.nodes.forEach(node=> node.remove())
+		})
+		rows = []
+	})
+
+	return fragment
+}
+
 const h = (tag, props, ...children)=> {
 	const nextProps = props || {}
 	const propChildren = nextProps.children ?? []
@@ -546,8 +684,8 @@ const h = (tag, props, ...children)=> {
 	return element
 }
 
-const jsx = (tag, props)=> h(tag, props)
-const jsxs = (tag, props)=> h(tag, props)
+const jsx = (tag, props, key)=> h(tag, key === undefined ? props : { ...props, key })
+const jsxs = (tag, props, key)=> h(tag, key === undefined ? props : { ...props, key })
 
 // Render by appending the normalized root node into the target container.
 // Returns a disposer function that cleans up all effects and listeners.
@@ -627,4 +765,5 @@ export {
 	If,
 	True,
 	False,
+	For,
 }

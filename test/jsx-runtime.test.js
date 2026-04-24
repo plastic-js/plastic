@@ -6,6 +6,7 @@ import {
 import { transformSync } from '@babel/core'
 import {
 	False,
+	For,
 	If,
 	True,
 	appendChildren,
@@ -621,6 +622,175 @@ describe('control flow: If and mountDynamic', ()=> {
 
 		visible(false)
 		expect(container.textContent).toContain('LegacyFalse')
+	})
+})
+
+describe('control flow: For list rendering', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('renders non-keyed lists, appends new rows, and removes trailing rows', ()=> {
+		const items = signal(['A', 'B'])
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		renderApp(container, h(For, {
+			each: items,
+		}, (item, index)=> h('div', null, `#${index()} ${item}`)))
+
+		expect(container.textContent).toContain('#0 A')
+		expect(container.textContent).toContain('#1 B')
+		expect(container.querySelectorAll('div')).toHaveLength(2)
+
+		items(['A', 'B', 'C'])
+
+		expect(container.textContent).toContain('#2 C')
+		expect(container.querySelectorAll('div')).toHaveLength(3)
+
+		items(['A'])
+
+		expect(container.textContent).toContain('#0 A')
+		expect(container.textContent).not.toContain('#1 B')
+		expect(container.querySelectorAll('div')).toHaveLength(1)
+	})
+
+	it('reuses rows by object identity without explicit key', ()=> {
+		const mount = vi.fn()
+		const cleanup = vi.fn()
+		const a = { id: 'a', label: 'A' }
+		const b = { id: 'b', label: 'B' }
+		const c = { id: 'c', label: 'C' }
+		const list = signal([a, b, c])
+
+		const Row = ({ item, index })=> {
+			onMount(()=> mount(item.id))
+			onCleanup(()=> cleanup(item.id))
+			return h('li', {
+				'data-id': item.id,
+				'data-index': index,
+			}, item.label)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const App = ()=> h('ul', null, h(For, {
+			each: list,
+		}, (item, index)=> h(Row, {
+			item,
+			index,
+		})))
+
+		renderApp(container, h(App))
+
+		const nodeA = container.querySelector('li[data-id="a"]')
+		const nodeB = container.querySelector('li[data-id="b"]')
+		const nodeC = container.querySelector('li[data-id="c"]')
+
+		expect(mount).toHaveBeenCalledTimes(3)
+		expect(cleanup).toHaveBeenCalledTimes(0)
+
+		list([c, a, b])
+
+		const reordered = [...container.querySelectorAll('li')]
+		expect(reordered.map(node=> node.getAttribute('data-id'))).toEqual(['c', 'a', 'b'])
+		expect(container.querySelector('li[data-id="a"]')).toBe(nodeA)
+		expect(container.querySelector('li[data-id="b"]')).toBe(nodeB)
+		expect(container.querySelector('li[data-id="c"]')).toBe(nodeC)
+		expect(mount).toHaveBeenCalledTimes(3)
+		expect(cleanup).toHaveBeenCalledTimes(0)
+	})
+
+	it('recreates rows when object references change without explicit key', ()=> {
+		const mount = vi.fn()
+		const cleanup = vi.fn()
+		const list = signal([
+			{ id: 'a', label: 'A' },
+			{ id: 'b', label: 'B' },
+		])
+
+		const Row = ({ item })=> {
+			onMount(()=> mount(item.id))
+			onCleanup(()=> cleanup(item.id))
+			return h('li', {
+				'data-id': item.id,
+			}, item.label)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const App = ()=> h('ul', null, h(For, {
+			each: list,
+		}, item=> h(Row, {
+			item,
+		})))
+		renderApp(container, h(App))
+
+		expect(mount).toHaveBeenCalledTimes(2)
+		expect(cleanup).toHaveBeenCalledTimes(0)
+
+		list([
+			{ id: 'b', label: 'B' },
+			{ id: 'a', label: 'A' },
+		])
+
+		expect(mount).toHaveBeenCalledTimes(4)
+		expect(cleanup).toHaveBeenCalledTimes(2)
+		expect(container.textContent).toBe('BA')
+	})
+
+	it('ignores key prop and still reconciles by object identity', ()=> {
+		const mount = vi.fn()
+		const cleanup = vi.fn()
+		const a = { id: 'a', label: 'A' }
+		const b = { id: 'b', label: 'B' }
+		const c = { id: 'c', label: 'C' }
+		const list = signal([a, b, c])
+
+		const Row = ({ item, index })=> {
+			onMount(()=> mount(item.id))
+			onCleanup(()=> cleanup(item.id))
+			return h('li', {
+				'data-id': item.id,
+				'data-index': index,
+			}, item.label)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const App = ()=> h('ul', null, h(For, {
+			each: list,
+			key: 'id',
+		}, (item, index)=> h(Row, {
+			item,
+			index,
+		})))
+
+		renderApp(container, h(App))
+
+		const nodeA = container.querySelector('li[data-id="a"]')
+		const nodeB = container.querySelector('li[data-id="b"]')
+		const nodeC = container.querySelector('li[data-id="c"]')
+
+		expect(container.textContent).toBe('ABC')
+		expect(mount).toHaveBeenCalledTimes(3)
+
+		list([c, a, b])
+
+		const reordered = [...container.querySelectorAll('li')]
+		expect(reordered.map(node=> node.getAttribute('data-id'))).toEqual(['c', 'a', 'b'])
+		expect(container.textContent).toBe('CAB')
+		expect(container.querySelector('li[data-id="a"]')).toBe(nodeA)
+		expect(container.querySelector('li[data-id="b"]')).toBe(nodeB)
+		expect(container.querySelector('li[data-id="c"]')).toBe(nodeC)
+		expect(mount).toHaveBeenCalledTimes(3)
+		expect(cleanup).toHaveBeenCalledTimes(0)
+
+		list([c, b])
+
+		expect(cleanup).toHaveBeenCalledTimes(1)
+		expect(cleanup).toHaveBeenCalledWith('a')
+		expect(container.textContent).toBe('CB')
 	})
 })
 
