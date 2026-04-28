@@ -24,7 +24,7 @@ const plugin = function(babel){
 	}
 
 	return {
-		name: 'transform-jsx-either',
+		name: 'transform-jsx-flow-control',
 		visitor: {
 			// Transform <Either condition={...}><True>…</True><False>…</False></Either>
 			// into     <Either condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />

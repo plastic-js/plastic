@@ -24,7 +24,7 @@ import {
 	renderApp,
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
-import transformIfPlugin from '../build/babel-plugin-transform-if.js'
+import transformFlowControlPlugin from '../build/babel-plugin-transform-flow-control.js'
 import transformTernaryPlugin from '../build/babel-plugin-transform-ternary.js'
 
 describe('jsx runtime static rendering', ()=> {
@@ -884,7 +884,7 @@ describe('babel plugin: Either slot lazy transform', ()=> {
 					importSource: 'jsx',
 				},
 			]],
-			plugins: [transformIfPlugin],
+			plugins: [transformFlowControlPlugin],
 		})
 
 		const code = transformed?.code ?? ''
@@ -941,7 +941,7 @@ describe('babel plugin: Match slot lazy transform', ()=> {
 					importSource: 'jsx',
 				},
 			]],
-			plugins: [transformIfPlugin],
+			plugins: [transformFlowControlPlugin],
 		})
 
 		const code = transformed?.code ?? ''

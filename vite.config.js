@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import babel from 'vite-plugin-babel'
 import path from 'path'
 import babelTernary from './build/babel-plugin-transform-ternary.js'
-import babelIf from './build/babel-plugin-transform-if.js'
+import babelFlowControl from './build/babel-plugin-transform-flow-control.js'
 
 export default defineConfig({
 	root: 'showcase',
@@ -18,7 +18,7 @@ export default defineConfig({
 						},
 					],
 				],
-				plugins: [babelTernary, babelIf],
+				plugins: [babelTernary, babelFlowControl],
 			},
 		}),
 	],
