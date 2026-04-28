@@ -2,6 +2,7 @@ import {
 	Either,
 	False,
 	Loop,
+	Portal,
 	True,
 	createComputed,
 	createSignal,
@@ -247,6 +248,73 @@ const rotateForItems = ()=> {
 const resetForItems = ()=> {
 	forItems(createForSeed())
 	bumpForEpoch()
+}
+
+// ─── Portal / Modal ──────────────────────────────────────────────────────────
+
+const portalOpen = createSignal(false)
+const portalTheme = createSignal('info')
+
+const Modal = ({ onClose, theme })=> {
+	const themeMap = {
+		info: {
+			bg: '#e8f4fd', border: '#2196f3', icon: 'ℹ️', label: 'Info',
+		},
+		success: {
+			bg: '#e8f5e9', border: '#4caf50', icon: '✓', label: 'Success',
+		},
+		warning: {
+			bg: '#fff8e1', border: '#ff9800', icon: '⚠', label: 'Warning',
+		},
+	}
+	const style = createComputed(()=> themeMap[theme()] ?? themeMap.info)
+
+	return (
+		<div className='modal-overlay' onClick={onClose}>
+			<div
+				className='modal-box'
+				onClick={e=> e.stopPropagation()}
+				style={createComputed(()=> ({
+					borderTop: `4px solid ${style().border}`,
+					background: style().bg,
+				}))}
+			>
+				<div className='modal-header'>
+					<span className='modal-icon'>
+						{createComputed(()=> style().icon)}
+					</span>
+					<strong>
+						Portal modal —
+						{' '}
+						{createComputed(()=> style().label)}
+					</strong>
+					<button className='modal-close' onClick={onClose} type='button'>✕</button>
+				</div>
+				<p className='modal-body'>
+					This dialog is rendered via
+					{' '}
+					<code>&lt;Portal&gt;</code>
+					{' '}
+					directly into
+					{' '}
+					<code>document.body</code>
+					, outside the
+					{' '}
+					<code>.app</code>
+					{' '}
+					container. The parent section never knows it is here, yet all
+					{' '}
+					reactive signals, effects, and cleanup still work correctly.
+				</p>
+				<div className='button-row'>
+					<Button onClick={()=> portalTheme('info')}>Info</Button>
+					<Button onClick={()=> portalTheme('success')}>Success</Button>
+					<Button onClick={()=> portalTheme('warning')}>Warning</Button>
+					<Button onClick={onClose}>Close</Button>
+				</div>
+			</div>
+		</div>
+	)
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -634,6 +702,55 @@ const app = (
 			<div className='feature-card' id='probe-root'>
 				Probe is unmounted.
 			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Portal</h2>
+			<p className='feature-copy'>
+				Use
+				{' '}
+				<code>
+					&lt;Portal container=
+					{'{el}'}
+					&gt;
+				</code>
+				{' '}
+				to render children into a DOM node outside the current tree.
+				A classic use-case is a modal overlay mounted on
+				{' '}
+				<code>document.body</code>
+				{' '}
+				so it sits above all other content regardless of
+				{' '}
+				<code>z-index</code>
+				{' '}
+				or overflow rules.
+			</p>
+			<div className='checklist'>
+				<p>
+					Modal:
+					{' '}
+					<strong>
+						{createComputed(()=> portalOpen() ? 'open' : 'closed')}
+					</strong>
+				</p>
+				<p>
+					Current theme:
+					{' '}
+					<strong>
+						{portalTheme}
+					</strong>
+				</p>
+			</div>
+			<div className='button-row'>
+				<Button onClick={()=> portalOpen(true)}>Open modal</Button>
+			</div>
+			<Either condition={portalOpen}>
+				<True>
+					<Portal>
+						<Modal onClose={()=> portalOpen(false)} theme={portalTheme} />
+					</Portal>
+				</True>
+			</Either>
 		</section>
 	</div>
 )

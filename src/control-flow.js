@@ -290,6 +290,40 @@ const createControlFlow = ({
 		return fragment
 	}
 
+	// <Portal container={el}>...</Portal>
+	//
+	// Renders children into `container` (defaults to document.body) instead of
+	// the component's position in the tree. A comment node is left as a placeholder
+	// so the surrounding component tree is not disturbed.
+	// All child owners, effects, and event listeners are disposed when the host
+	// component unmounts via the registerCleanup call below.
+	const Portal = ({ container, children })=> {
+		const target = (typeof container === 'function' ? container() : container) ?? document.body
+
+		const hostOwner = getCurrentOwner()
+		const owner = createOwner(hostOwner)
+
+		const prevComp = getCurrentComputation()
+		setCurrentComputation(null)
+		const result = runWithOwner(owner, ()=> typeof children === 'function' ? children() : children)
+		const node = renderInOwner(owner, result ?? null)
+		setCurrentComputation(prevComp)
+
+		const portalNodes = node instanceof DocumentFragment ? [...node.childNodes] : [node]
+		target.appendChild(node)
+
+		if (target.isConnected){
+			runOwnerMounts(owner)
+		}
+
+		registerCleanup(()=> {
+			disposeOwner(owner)
+			portalNodes.forEach(n=> n.remove())
+		})
+
+		return document.createComment('portal')
+	}
+
 	return {
 		mountDynamic,
 		Either,
@@ -299,6 +333,7 @@ const createControlFlow = ({
 		Case,
 		Default,
 		Loop,
+		Portal,
 	}
 }
 

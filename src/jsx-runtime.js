@@ -396,6 +396,7 @@ const {
 	Case,
 	Default,
 	Loop,
+	Portal,
 } = createControlFlow({
 	createOwner,
 	runOwnerMounts,
@@ -536,4 +537,5 @@ export {
 	Case,
 	Default,
 	Loop,
+	Portal,
 }

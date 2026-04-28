@@ -81,7 +81,7 @@
 - [X] Built on the same `mountDynamic` primitive as `<Either>`.
 
 ### Extras
-- [ ] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
+- [X] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
 - [ ] `<Dynamic component={tag}>` — select component or HTML tag dynamically at runtime.
 - [ ] Guarantee deterministic update order between parent effects and child effects.
 - [ ] Implement a simple state management system using the tree API.
