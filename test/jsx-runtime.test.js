@@ -5,9 +5,9 @@ import {
 } from 'vitest'
 import { transformSync } from '@babel/core'
 import {
+	Either,
 	False,
-	For,
-	If,
+	Loop,
 	True,
 	appendChildren,
 	applyProps,
@@ -587,7 +587,7 @@ describe('lifecycle & cleanup management', ()=> {
 	})
 })
 
-describe('control flow: If and mountDynamic', ()=> {
+describe('control flow: Either and mountDynamic', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
 	})
@@ -611,7 +611,7 @@ describe('control flow: If and mountDynamic', ()=> {
 			return h('p', null, 'B')
 		}
 
-		const App = ()=> h('section', null, h(If, {
+		const App = ()=> h('section', null, h(Either, {
 			condition: showA,
 			trueBranch: ()=> h(True, null, h(BranchA)),
 			falseBranch: ()=> h(False, null, h(BranchB)),
@@ -643,7 +643,7 @@ describe('control flow: If and mountDynamic', ()=> {
 		const container = document.createElement('div')
 		document.body.appendChild(container)
 
-		renderApp(container, h(If, {
+		renderApp(container, h(Either, {
 			condition: visible,
 			trueBranch: ()=> h('span', null, 'LegacyTrue'),
 			falseBranch: ()=> h('span', null, 'LegacyFalse'),
@@ -656,7 +656,7 @@ describe('control flow: If and mountDynamic', ()=> {
 	})
 })
 
-describe('control flow: For list rendering', ()=> {
+describe('control flow: Loop list rendering', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
 	})
@@ -666,7 +666,7 @@ describe('control flow: For list rendering', ()=> {
 		const container = document.createElement('div')
 		document.body.appendChild(container)
 
-		renderApp(container, h(For, {
+		renderApp(container, h(Loop, {
 			each: items,
 		}, (item, index)=> h('div', null, `#${index()} ${item}`)))
 
@@ -705,7 +705,7 @@ describe('control flow: For list rendering', ()=> {
 
 		const container = document.createElement('div')
 		document.body.appendChild(container)
-		const App = ()=> h('ul', null, h(For, {
+		const App = ()=> h('ul', null, h(Loop, {
 			each: list,
 		}, (item, index)=> h(Row, {
 			item,
@@ -750,7 +750,7 @@ describe('control flow: For list rendering', ()=> {
 
 		const container = document.createElement('div')
 		document.body.appendChild(container)
-		const App = ()=> h('ul', null, h(For, {
+		const App = ()=> h('ul', null, h(Loop, {
 			each: list,
 		}, item=> h(Row, {
 			item,
@@ -789,7 +789,7 @@ describe('control flow: For list rendering', ()=> {
 
 		const container = document.createElement('div')
 		document.body.appendChild(container)
-		const App = ()=> h('ul', null, h(For, {
+		const App = ()=> h('ul', null, h(Loop, {
 			each: list,
 			key: 'id',
 		}, (item, index)=> h(Row, {
@@ -825,14 +825,14 @@ describe('control flow: For list rendering', ()=> {
 	})
 })
 
-describe('babel plugin: If slot lazy transform', ()=> {
-	it('rewrites <If><True/><False/></If> children into trueBranch/falseBranch factory props', ()=> {
+describe('babel plugin: Either slot lazy transform', ()=> {
+	it('rewrites <Either><True/><False/></Either> children into trueBranch/falseBranch factory props', ()=> {
 		const source = `
 			const view = (
-				<If condition={flag()}>
+				<Either condition={flag()}>
 					<True><p>A</p></True>
 					<False><p>B</p></False>
-				</If>
+				</Either>
 			)
 		`
 

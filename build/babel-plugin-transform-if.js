@@ -2,15 +2,15 @@ const plugin = function(babel){
 	const { types: t } = babel
 
 	return {
-		name: 'transform-jsx-if',
+		name: 'transform-jsx-either',
 		visitor: {
-			// Transform <If condition={...}><True>…</True><False>…</False></If>
-			// into     <If condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />
+			// Transform <Either condition={...}><True>…</True><False>…</False></Either>
+			// into     <Either condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />
 			// so that the inactive branch is never evaluated until it becomes active.
 			JSXElement(path){
 				const { openingElement, children } = path.node
 
-				if (!t.isJSXIdentifier(openingElement.name, { name: 'If' })){ return }
+				if (!t.isJSXIdentifier(openingElement.name, { name: 'Either' })){ return }
 
 				openingElement.attributes = openingElement.attributes.filter((attribute)=> {
 					if (!t.isJSXAttribute(attribute) || !t.isJSXIdentifier(attribute.name)){

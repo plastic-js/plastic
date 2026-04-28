@@ -394,7 +394,7 @@ const appendChildren = (parent, children)=> {
 const mountDynamic = (anchor, getContent)=> {
 	let prevNodes = []
 	let prevOwner = null
-	// Capture the If component's owner at call time so branch owners are always
+	// Capture the Either component's owner at call time so branch owners are always
 	// parented correctly even when the effect re-runs outside component context.
 	const hostOwner = currentOwner
 
@@ -446,20 +446,20 @@ const mountDynamic = (anchor, getContent)=> {
 }
 
 // <True> and <False> are transparent slot markers — they pass children through.
-// The Babel plugin wraps them in lazy arrow functions before If ever sees them,
+// The Babel plugin wraps them in lazy arrow functions before Either ever sees them,
 // so the inactive branch is never evaluated until needed.
 const True = ({ children })=> children
 const False = ({ children })=> children
 
-// <If condition={...}>
+// <Either condition={...}>
 //   <True>…</True>
 //   <False>…</False>
-// </If>
+// </Either>
 //
 // The Babel plugin transforms this into:
-//   <If condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />
+//   <Either condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />
 // so branches are only rendered when active.
-const If = ({
+const Either = ({
 	condition, trueBranch, falseBranch,
 })=> {
 	const anchor = document.createComment('if')
@@ -479,10 +479,10 @@ const If = ({
 	return fragment
 }
 
-// <For each={items}>{(item, index) => ...}</For>
+// <Loop each={items}>{(item, index) => ...}</Loop>
 //
 // Rows are tracked by identity (object reference / primitive value).
-const For = ({
+const Loop = ({
 	each,
 	children,
 })=> {
@@ -736,8 +736,8 @@ export {
 	appendChildren,
 	// Control flow
 	mountDynamic,
-	If,
+	Either,
 	True,
 	False,
-	For,
+	Loop,
 }

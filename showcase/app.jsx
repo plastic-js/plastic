@@ -1,7 +1,7 @@
 import {
+	Either,
 	False,
-	For,
-	If,
+	Loop,
 	True,
 	createComputed,
 	createSignal,
@@ -201,12 +201,12 @@ const ternaryPanelStyle = createComputed(()=> {
 	}
 })
 
-// ─── If / True / False Control Flow ─────────────────────────────────────────
+// ─── Either / True / False Control Flow ───────────────────────────────────────
 
 const ifVisible = createSignal(false)
 const ifPlan = createSignal('starter')
 
-// ─── For List Rendering ─────────────────────────────────────────────────────
+// ─── Loop List Rendering ───────────────────────────────────────────────────
 
 const createForSeed = ()=> [
 	{ id: 'a', label: 'Alpha' },
@@ -335,19 +335,19 @@ const app = (
 			>
 				Hover over this box to increment counter
 			</div>
-			<If condition={createComputed(()=> inputHistory().length > 0)}>
+			<Either condition={createComputed(()=> inputHistory().length > 0)}>
 				<True>
 					<ul style={{ margin: 0, paddingLeft: '20px' }}>
-						<For each={inputHistory}>
+						<Loop each={inputHistory}>
 							{(entry, idx)=> (
 								<li key={idx}>
 									{entry}
 								</li>
 							)}
-						</For>
+						</Loop>
 					</ul>
 				</True>
-			</If>
+			</Either>
 		</section>
 		<section className='feature-card'>
 			<h2>Form handling with tree reactivity</h2>
@@ -401,7 +401,7 @@ const app = (
 				<div className='button-row'>
 					<Button type='submit'>Submit</Button>
 				</div>
-				<If condition={createComputed(()=> formData.submitted)}>
+				<Either condition={createComputed(()=> formData.submitted)}>
 					<True>
 						<div style={{
 							padding: '12px',
@@ -413,7 +413,7 @@ const app = (
 							✓ Form submitted successfully! (auto-clears in 2 seconds)
 						</div>
 					</True>
-				</If>
+				</Either>
 			</form>
 		</section>
 		<section className='feature-card'>
@@ -489,11 +489,11 @@ const app = (
 			</div>
 		</section>
 		<section className='feature-card'>
-			<h2>Control flow with If</h2>
+			<h2>Control flow with Either</h2>
 			<p className='feature-copy'>
 				Use
 				{' '}
-				<code>&lt;If&gt;</code>
+				<code>&lt;Either&gt;</code>
 				{' '}
 				with
 				{' '}
@@ -519,7 +519,7 @@ const app = (
 					</strong>
 				</p>
 			</div>
-			<If condition={ifVisible}>
+			<Either condition={ifVisible}>
 				<True>
 					<div className='checklist'>
 						<p>Welcome back! You can now access the dashboard branch.</p>
@@ -538,7 +538,7 @@ const app = (
 						<p>Flip the toggle to mount the private branch content.</p>
 					</div>
 				</False>
-			</If>
+			</Either>
 			<div className='button-row'>
 				<Button onClick={()=> ifVisible(!ifVisible())}>
 					{createComputed(()=> ifVisible() ? 'Switch to False branch' : 'Switch to True branch')}
@@ -549,12 +549,12 @@ const app = (
 			</div>
 		</section>
 		<section className='feature-card'>
-			<h2>Control flow with For</h2>
+			<h2>Control flow with Loop</h2>
 			<p className='feature-copy'>
 				Use
 				{' '}
 				<code>
-					&lt;For each=
+					&lt;Loop each=
 					{'{'}
 					items
 					{'}'}
@@ -585,7 +585,7 @@ const app = (
 				<p>Try "Rotate" to see keyed rows move without remounting unchanged items.</p>
 			</div>
 			<ul className='checklist'>
-				<For each={forItems}>
+				<Loop each={forItems}>
 					{(item, index)=> (
 						<li>
 							#
@@ -596,7 +596,7 @@ const app = (
 							{item.label}
 						</li>
 					)}
-				</For>
+				</Loop>
 			</ul>
 			<div className='button-row'>
 				<Button onClick={addForItem}>Add row</Button>

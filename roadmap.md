@@ -64,29 +64,27 @@
 ### Foundation
 - [X] Implement `mountDynamic(anchor, getContent)` primitive — reactive branch switching via comment-node anchors, owner disposal, and onMount coordination.
 
-### `<If>` Conditional Rendering
-- [X] Implement `<If condition={...}>` with `<True>` and `<False>` slot components.
-- [X] Extend Babel plugin to lazily transform `<True>`/`<False>` children into `_true`/`_false` factory props, preventing eager evaluation of the inactive branch.
+### `<Either>` Conditional Rendering
+- [X] Implement `<Either condition={...}>` with `<True>` and `<False>` slot components.
+- [X] Extend Babel plugin to lazily transform `<True>`/`<False>` children into `trueBranch`/`falseBranch` factory props, preventing eager evaluation of the inactive branch.
 - [X] Dispose previous branch owner and remove its DOM nodes when condition changes.
 - [X] Call `runOwnerMounts` for newly activated branches when anchor is already in the live DOM.
 
-### `<For>` List Rendering
-- [ ] Implement `<For each={items}>{(item, index) => <Row />}</For>` with a render-function child.
-- [ ] Step A: Non-keyed — diff by length, append new items, dispose+remove trailing items.
-- [ ] Step B: Keyed reconciliation — cache `key → { owner, nodes }` to reuse unchanged items; only create/destroy what changed.
-- [ ] Support `key` prop (string accessor) or `key` callback `(item) => id` on `<For>`.
-- [ ] Dispose item owners and remove their nodes when items are removed from the list.
+### `<Loop>` List Rendering
+- [X] Implement `<Loop each={items}>{(item, index) => <Row />}</Loop>` with a render-function child.
+- [X] Dispose item owners and remove their nodes when items are removed from the list.
 
-### `<Switch>` Multi-branch Rendering
-- [ ] Implement `<Switch>` with `<Case when={...}>` and `<Default>` slot components.
-- [ ] Support value-match style: `<Switch value={x}><Case match="a">…</Case></Switch>`.
+### `<Match>` Multi-branch Rendering
+- [ ] Implement `<Match>` with `<Case when={...}>` and `<Default>` slot components.
+- [ ] Support value-match style: `<Match value={x}><Case match="a">…</Case></Match>`.
 - [ ] Extend Babel plugin to lazily wrap `<Case>`/`<Default>` children as factory props.
-- [ ] Built on the same `mountDynamic` primitive as `<If>`.
+- [ ] Built on the same `mountDynamic` primitive as `<Either>`.
 
 ### Extras
 - [ ] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
 - [ ] `<Dynamic component={tag}>` — select component or HTML tag dynamically at runtime.
 - [ ] Guarantee deterministic update order between parent effects and child effects.
+- [ ] Implement a simple state management system using the tree API.
 
 ## Performance Optimization
 - [ ] Avoid unnecessary DOM writes when a reactive prop resolves to the same value.

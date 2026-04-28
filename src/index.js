@@ -1,8 +1,8 @@
 import {
 	False,
-	For,
+	Loop,
 	Fragment,
-	If,
+	Either,
 	True,
 	createBindingEffect,
 	createComputed,
@@ -19,9 +19,9 @@ import {
 export {
 	False,
 	createTree,
-	For,
+	Loop,
 	Fragment,
-	If,
+	Either,
 	True,
 	h,
 	jsx,

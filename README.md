@@ -10,6 +10,8 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - **Event binding** — `onXxx` props map to `addEventListener` automatically.
 - **Style objects** — pass a plain object to the `style` prop, including CSS custom properties.
 - **Fragment support** — return multiple root nodes without a wrapper element.
+- **`<Either>` conditional rendering** — lazily renders only the active branch (`<True>`/`<False>`) via a comment-node anchor; inactive branches are never evaluated until the condition flips.
+- **`<Loop>` list rendering** — reconciles lists by object identity; reuses, moves, and disposes item rows with fine-grained owner tracking.
 
 ## Lifecycle Semantics
 
