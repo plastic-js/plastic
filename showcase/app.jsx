@@ -5,6 +5,7 @@ import {
 	True,
 	createComputed,
 	createSignal,
+	createTree,
 	onCleanup,
 	onMount,
 	renderApp,
@@ -33,6 +34,19 @@ const Tag = ({ children, variant = 'default' })=> (
 	</span>
 )
 
+const Button = ({
+	onClick, children, disabled = false, className = '', type = 'button',
+})=> (
+	<button
+		className={className}
+		disabled={disabled}
+		onClick={onClick}
+		type={type}
+	>
+		{children}
+	</button>
+)
+
 // ─── Signals & Function Components ───────────────────────────────────────────
 
 const count = createSignal(0)
@@ -44,6 +58,64 @@ const tagVariant = createComputed(()=> {
 	if (count() >= 5){ return 'danger' }
 	return count() >= 2 ? 'warning' : 'info'
 })
+
+// ─── Event Binding ────────────────────────────────────────────────────────────
+
+const inputValue = createSignal('')
+const inputHistory = createSignal([])
+const focusCount = createSignal(0)
+const hoverCount = createSignal(0)
+
+const handleInputChange = (event)=> {
+	inputValue(event.target.value)
+}
+
+const handleInputBlur = ()=> {
+	if (inputValue().trim()){
+		const history = inputHistory()
+		inputHistory([...history, inputValue()])
+		inputValue('')
+	}
+}
+
+const handleMouseEnter = ()=> {
+	hoverCount(hoverCount() + 1)
+}
+
+const handleMouseLeave = ()=> {
+	// Just for demonstration
+}
+
+const clearInputHistory = ()=> {
+	inputHistory([])
+	focusCount(0)
+}
+
+// ─── Form State Management ────────────────────────────────────────────────────
+
+const formData = createTree({
+	name: '',
+	email: '',
+	message: '',
+	submitted: false,
+})
+
+const handleFormChange = (field, event)=> {
+	formData[field] = event.target.value
+}
+
+const handleFormSubmit = (event)=> {
+	event.preventDefault()
+	if (formData.name.trim() && formData.email.trim()){
+		formData.submitted = true
+		setTimeout(()=> {
+			formData.submitted = false
+			formData.name = ''
+			formData.email = ''
+			formData.message = ''
+		}, 2000)
+	}
+}
 
 // ─── Reactive Props ───────────────────────────────────────────────────────────
 
@@ -189,29 +261,171 @@ const app = (
 			</p>
 		</header>
 		<section className='feature-card'>
-			<div className='section-head'>
-				<div>
-					<h2>Signals & function components</h2>
-					<p>Reactive signals passed as props stay live inside child components.</p>
-				</div>
-				<Tag variant={tagVariant}>
-					{status}
-				</Tag>
-			</div>
+			<h2>Signals & function components</h2>
+			<p>Reactive signals passed as props stay live inside child components.</p>
 			<div className='stat-grid'>
 				<StatCard title='Count' value={count} />
 				<StatCard title='Status' value={status} />
 			</div>
 			<div className='button-row'>
-				<button onClick={()=> count(count() + 1)} type='button'>Increment</button>
-				<button onClick={()=> count(0)} type='button'>Reset</button>
+				<Button onClick={()=> count(count() + 1)}>Increment</Button>
+				<Button onClick={()=> count(0)}>Reset</Button>
 			</div>
 		</section>
 		<section className='feature-card'>
-			<h2>Reactive props</h2>
+			<h2>Event binding</h2>
 			<p className='feature-copy'>
-				className, style, and boolean attributes bind to signals and update without re-creating elements.
+				The runtime supports
+				{' '}
+				<code>onXxx</code>
+				{' '}
+				event props that map to
+				{' '}
+				<code>addEventListener</code>
+				. Events fire for native DOM interactions and cleanup automatically on unmount.
 			</p>
+			<div className='checklist'>
+				<p>
+					Input value:
+					{' '}
+					<strong>
+						{inputValue() || '(empty)'}
+					</strong>
+				</p>
+				<p>
+					Saved entries:
+					{' '}
+					<strong>
+						{inputHistory().length}
+					</strong>
+				</p>
+				<p>
+					Hover count:
+					{' '}
+					<strong>
+						{hoverCount}
+					</strong>
+				</p>
+			</div>
+			<div style={{
+				display: 'flex', gap: '8px', marginBottom: '12px',
+			}}
+			>
+				<input
+					onBlur={handleInputBlur}
+					onInput={handleInputChange}
+					placeholder='Type and press blur to save'
+					style={{
+						flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ccc',
+					}}
+					type='text'
+					value={inputValue}
+				/>
+				<Button onClick={clearInputHistory}>Clear history</Button>
+			</div>
+			<div
+				onMouseEnter={handleMouseEnter}
+				onMouseLeave={handleMouseLeave}
+				style={{
+					padding: '12px',
+					background: '#f0f0f0',
+					borderRadius: '4px',
+					marginBottom: '12px',
+				}}
+			>
+				Hover over this box to increment counter
+			</div>
+			<If condition={createComputed(()=> inputHistory().length > 0)}>
+				<True>
+					<ul style={{ margin: 0, paddingLeft: '20px' }}>
+						<For each={inputHistory}>
+							{(entry, idx)=> (
+								<li key={idx}>
+									{entry}
+								</li>
+							)}
+						</For>
+					</ul>
+				</True>
+			</If>
+		</section>
+		<section className='feature-card'>
+			<h2>Form handling with tree reactivity</h2>
+			<p className='feature-copy'>
+				Combine
+				{' '}
+				<code>createTree</code>
+				{' '}
+				for form state with event handlers. Direct field mutations update the DOM reactively.
+			</p>
+			<form
+				onSubmit={handleFormSubmit} style={{
+					display: 'flex', flexDirection: 'column', gap: '12px',
+				}}
+			>
+				<div style={{ display: 'flex', flexDirection: 'column' }}>
+					<label style={{ marginBottom: '4px', fontWeight: 500 }}>Name:</label>
+					<input
+						onChange={event=> handleFormChange('name', event)}
+						placeholder='Enter your name'
+						style={{
+							padding: '8px', borderRadius: '4px', border: '1px solid #ccc',
+						}}
+						type='text'
+						value={formData.name}
+					/>
+				</div>
+				<div style={{ display: 'flex', flexDirection: 'column' }}>
+					<label style={{ marginBottom: '4px', fontWeight: 500 }}>Email:</label>
+					<input
+						onChange={event=> handleFormChange('email', event)}
+						placeholder='Enter your email'
+						style={{
+							padding: '8px', borderRadius: '4px', border: '1px solid #ccc',
+						}}
+						type='email'
+						value={formData.email}
+					/>
+				</div>
+				<div style={{ display: 'flex', flexDirection: 'column' }}>
+					<label style={{ marginBottom: '4px', fontWeight: 500 }}>Message:</label>
+					<textarea
+						onChange={event=> handleFormChange('message', event)}
+						placeholder='Enter your message'
+						style={{
+							padding: '8px', borderRadius: '4px', border: '1px solid #ccc', minHeight: '80px',
+						}}
+						value={formData.message}
+					/>
+				</div>
+				<div className='button-row'>
+					<Button type='submit'>Submit</Button>
+				</div>
+				<If condition={createComputed(()=> formData.submitted)}>
+					<True>
+						<div style={{
+							padding: '12px',
+							background: '#e8f5e9',
+							borderLeft: '3px solid #4caf50',
+							borderRadius: '4px',
+						}}
+						>
+							✓ Form submitted successfully! (auto-clears in 2 seconds)
+						</div>
+					</True>
+				</If>
+			</form>
+		</section>
+		<section className='feature-card'>
+			<div className='section-head'>
+				<div>
+					<h2>Reactive props & computed styles</h2>
+					<p>className, style, and attributes bind to signals for live updates.</p>
+				</div>
+				<Tag variant={tagVariant}>
+					{status}
+				</Tag>
+			</div>
 			<div className={cardClass}>
 				<p className='profile-kicker'>
 					className is
@@ -230,9 +444,9 @@ const app = (
 					Reactive style object — switching modes removes stale CSS keys cleanly.
 				</div>
 				<div className='button-row'>
-					<button onClick={()=> locked(!locked())} type='button'>Toggle locked</button>
-					<button onClick={()=> styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')} type='button'>Switch style</button>
-					<button disabled={locked} type='button'>Reactive disabled</button>
+					<Button onClick={()=> locked(!locked())}>Toggle locked</Button>
+					<Button onClick={()=> styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')}>Switch style</Button>
+					<Button disabled={locked}>Reactive disabled</Button>
 				</div>
 			</div>
 		</section>
@@ -266,12 +480,12 @@ const app = (
 				{ternaryTheme() === 'day' ? 'Bright day panel — switch theme or hide me.' : 'Dark night panel — switch theme or hide me.'}
 			</div>
 			<div className='button-row'>
-				<button onClick={()=> ternaryVisible(!ternaryVisible())} type='button'>
+				<Button onClick={()=> ternaryVisible(!ternaryVisible())}>
 					{ternaryVisible() ? 'Hide panel' : 'Show panel'}
-				</button>
-				<button onClick={()=> ternaryTheme(ternaryTheme() === 'day' ? 'night' : 'day')} type='button'>
+				</Button>
+				<Button onClick={()=> ternaryTheme(ternaryTheme() === 'day' ? 'night' : 'day')}>
 					{ternaryTheme() === 'day' ? 'Switch to night' : 'Switch to day'}
-				</button>
+				</Button>
 			</div>
 		</section>
 		<section className='feature-card'>
@@ -326,12 +540,12 @@ const app = (
 				</False>
 			</If>
 			<div className='button-row'>
-				<button onClick={()=> ifVisible(!ifVisible())} type='button'>
+				<Button onClick={()=> ifVisible(!ifVisible())}>
 					{createComputed(()=> ifVisible() ? 'Switch to False branch' : 'Switch to True branch')}
-				</button>
-				<button onClick={()=> ifPlan(ifPlan() === 'starter' ? 'pro' : 'starter')} type='button'>
+				</Button>
+				<Button onClick={()=> ifPlan(ifPlan() === 'starter' ? 'pro' : 'starter')}>
 					{createComputed(()=> ifPlan() === 'starter' ? 'Upgrade to pro' : 'Downgrade to starter')}
-				</button>
+				</Button>
 			</div>
 		</section>
 		<section className='feature-card'>
@@ -371,7 +585,7 @@ const app = (
 				<p>Try "Rotate" to see keyed rows move without remounting unchanged items.</p>
 			</div>
 			<ul className='checklist'>
-				<For each={forItems} key={item=> `${forEpoch()}-${item.id}`}>
+				<For each={forItems}>
 					{(item, index)=> (
 						<li>
 							#
@@ -385,10 +599,10 @@ const app = (
 				</For>
 			</ul>
 			<div className='button-row'>
-				<button onClick={addForItem} type='button'>Add row</button>
-				<button onClick={removeLastForItem} type='button'>Remove last</button>
-				<button onClick={rotateForItems} type='button'>Rotate</button>
-				<button onClick={resetForItems} type='button'>Reset</button>
+				<Button onClick={addForItem}>Add row</Button>
+				<Button onClick={removeLastForItem}>Remove last</Button>
+				<Button onClick={rotateForItems}>Rotate</Button>
+				<Button onClick={resetForItems}>Reset</Button>
 			</div>
 		</section>
 		<section className='feature-card'>
@@ -413,9 +627,9 @@ const app = (
 				<StatCard title='Cleaned up' value={cleanupCount} />
 			</div>
 			<div className='button-row'>
-				<button onClick={toggleProbe} type='button'>
+				<Button onClick={toggleProbe}>
 					{createComputed(()=> probeActive() ? 'Unmount probe' : 'Mount probe')}
-				</button>
+				</Button>
 			</div>
 			<div className='feature-card' id='probe-root'>
 				Probe is unmounted.

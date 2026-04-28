@@ -4,19 +4,21 @@ import {
 	Fragment,
 	If,
 	True,
-	computed,
 	createBindingEffect,
+	createComputed,
+	createSignal,
+	createTree,
 	h,
 	jsx,
 	jsxs,
 	onMount,
 	registerCleanup,
 	renderApp,
-	signal,
 } from './jsx-runtime.js'
 
 export {
 	False,
+	createTree,
 	For,
 	Fragment,
 	If,
@@ -28,7 +30,7 @@ export {
 	registerCleanup as onCleanup,
 	renderApp,
 	createBindingEffect as createEffect,
-	signal as createSignal,
-	computed as createComputed,
+	createComputed,
+	createSignal,
 }
 

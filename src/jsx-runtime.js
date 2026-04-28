@@ -1,6 +1,9 @@
 import {
-	computed, effect, isComputed, isSignal, signal,
-} from 'alien-signals'
+	createComputed, createSignal, createTree, effect, isComputed, isSignal, isTree, toRaw,
+} from './reactivity.js'
+import {
+	flattenChildren, isEventProp, normalizeTextNodeValue, toClassMap, toClassTokens,
+} from './utils.js'
 
 const Fragment = Symbol('Fragment')
 const OWNER = Symbol('owner')
@@ -42,6 +45,8 @@ const runWithOwner = (owner, fn)=> {
 		currentOwner = prev
 	}
 }
+
+const renderInOwner = (owner, result)=> runWithOwner(owner, ()=> node2Element(result))
 
 const disposeOwner = (owner)=> {
 	if (owner.parent){
@@ -135,8 +140,6 @@ const onUnmount = (fn)=> {
 const isReactivePrimitive = value=> isSignal(value) || isComputed(value)
 const isReactive = value=> isReactivePrimitive(value) || typeof value === 'function'
 const createPlaceholder = ()=> document.createComment('null')
-const flattenChildren = children=> children.flat(Infinity)
-const isEventProp = key=> (/^on[A-Za-z]/).test(key)
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
 const isBooleanDomProp = (element, key)=> key in element && typeof element[key] === 'boolean'
 
@@ -151,14 +154,6 @@ const JSX_PROP_MAP = {
 	hrefLang: 'hreflang',
 }
 
-const normalizeTextNodeValue = (value)=> {
-	if (value == null){
-		return ''
-	}
-
-	return String(value)
-}
-
 const createReactiveTextNode = (reactiveValue)=> {
 	const textNode = document.createTextNode('')
 
@@ -167,30 +162,6 @@ const createReactiveTextNode = (reactiveValue)=> {
 	})
 
 	return textNode
-}
-
-const toClassTokens = (value)=> {
-	if (typeof value !== 'string'){
-		return new Set()
-	}
-
-	return new Set(value
-		.split(/\s+/)
-		.filter(Boolean))
-}
-
-const toClassMap = (value)=> {
-	// null
-	if(!value){
-		return new Map()
-	}
-	// string
-	const tokens = toClassTokens(value)
-	const map = new Map()
-	tokens.forEach((token)=> {
-		map.set(token, true)
-	})
-	return map
 }
 
 const applyClassNameMap = (element, classNameMap)=> {
@@ -439,7 +410,7 @@ const mountDynamic = (anchor, getContent)=> {
 		const prevComp = currentComputation
 		currentComputation = null
 		const result = runWithOwner(owner, getContent)
-		const node = runWithOwner(owner, ()=> node2Element(result ?? null))
+		const node = renderInOwner(owner, result ?? null)
 		currentComputation = prevComp
 
 		// Collect child refs before insertion: DocumentFragment drains on append
@@ -529,7 +500,7 @@ const For = ({
 
 	const renderRow = (item, indexValue)=> {
 		const owner = createOwner(hostOwner)
-		const indexSignal = signal(indexValue)
+		const indexSignal = createSignal(indexValue)
 		const prevComp = currentComputation
 		currentComputation = null
 		const result = runWithOwner(owner, ()=> {
@@ -539,7 +510,7 @@ const For = ({
 
 			return children(item, indexSignal)
 		})
-		const node = runWithOwner(owner, ()=> node2Element(result))
+		const node = renderInOwner(owner, result)
 		currentComputation = prevComp
 		const nodes = node instanceof DocumentFragment ? [...node.childNodes] : [node]
 
@@ -663,7 +634,7 @@ const h = (tag, props, ...children)=> {
 		// Function components receive a single props object; children are injected under props.children.
 		const componentProps = { ...nextProps, children: mergedChildren.length === 1 ? mergedChildren[0] : mergedChildren }
 		const result = runWithOwner(owner, ()=> tag(componentProps))
-		const normalized = runWithOwner(owner, ()=> node2Element(result))
+		const normalized = renderInOwner(owner, result)
 
 		// Attach owner to result for unmount tracking
 		if (normalized instanceof Node){
@@ -725,8 +696,11 @@ export {
 	onUnmount,
 	renderApp,
 	// Internal signal primitives (framework internals/tests)
-	signal,
-	computed,
+	createComputed,
+	createSignal,
+	createTree,
+	toRaw,
+	isTree,
 	// Owner / lifecycle internals
 	createOwner,
 	runOwnerMounts,

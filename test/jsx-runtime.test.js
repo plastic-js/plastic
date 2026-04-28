@@ -12,12 +12,13 @@ import {
 	appendChildren,
 	applyProps,
 	createOwner,
+	createSignal,
+	createTree,
 	disposeOwner,
 	h,
 	jsx,
 	onMount,
 	renderApp,
-	signal,
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
 import transformIfPlugin from '../build/babel-plugin-transform-if.js'
@@ -78,8 +79,8 @@ describe('jsx runtime static rendering', ()=> {
 		expect(onInvalid).not.toHaveBeenCalled()
 	})
 
-	it('updates text nodes when a signal child changes', ()=> {
-		const count = signal(1)
+	it('updates text nodes when a createSignal child changes', ()=> {
+		const count = createSignal(1)
 		const element = h('p', null, 'Count: ', count)
 
 		expect(element.textContent).toBe('Count: 1')
@@ -91,8 +92,8 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('Count: 2')
 	})
 
-	it('updates DOM props when a signal prop changes', ()=> {
-		const title = signal('draft')
+	it('updates DOM props when a createSignal prop changes', ()=> {
+		const title = createSignal('draft')
 		const element = h('div', {
 			title,
 		})
@@ -112,7 +113,7 @@ describe('jsx runtime static rendering', ()=> {
 	})
 
 	it('updates DOM props from getter sources that read signals', ()=> {
-		const prefix = signal('Ada')
+		const prefix = createSignal('Ada')
 		const element = h('div', {
 			'aria-label': ()=> `${prefix()} Lovelace`,
 		})
@@ -124,11 +125,11 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
 	})
 
-	it('updates dynamic boolean props from a signal source', ()=> {
-		const disabled = signal(true)
-		const checked = signal(true)
-		const selected = signal(true)
-		const readOnly = signal(true)
+	it('updates dynamic boolean props from a createSignal source', ()=> {
+		const disabled = createSignal(true)
+		const checked = createSignal(true)
+		const selected = createSignal(true)
+		const readOnly = createSignal(true)
 
 		const button = h('button', {
 			disabled,
@@ -169,8 +170,8 @@ describe('jsx runtime static rendering', ()=> {
 		expect(textInput.hasAttribute('readonly')).toBe(false)
 	})
 
-	it('updates className from a signal and removes stale tokens', ()=> {
-		const statusClass = signal('card ready')
+	it('updates className from a createSignal and removes stale tokens', ()=> {
+		const statusClass = createSignal('card ready')
 		const element = h('div', {
 			className: statusClass,
 		})
@@ -197,7 +198,7 @@ describe('jsx runtime static rendering', ()=> {
 	})
 
 	it('renders reactive nullish values as empty text and booleans as strings', ()=> {
-		const value = signal('ready')
+		const value = createSignal('ready')
 		const element = h('p', null, value)
 
 		expect(element.textContent).toBe('ready')
@@ -212,8 +213,21 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('0')
 	})
 
+	it('renders getter child values from createTree and updates when tree fields change', ()=> {
+		const state = createTree({
+			count: 1,
+		})
+		const element = h('pre', null, ()=> `{"count":${state.count}}`)
+
+		expect(element.textContent).toBe('{"count":1}')
+
+		state.count = 2
+
+		expect(element.textContent).toBe('{"count":2}')
+	})
+
 	it('updates style from a reactive string and clears on null', ()=> {
-		const styleStr = signal('color: red')
+		const styleStr = createSignal('color: red')
 		const element = h('div', {
 			style: styleStr,
 		})
@@ -231,7 +245,7 @@ describe('jsx runtime static rendering', ()=> {
 	})
 
 	it('updates style from a reactive object and clears removed keys', ()=> {
-		const styles = signal({
+		const styles = createSignal({
 			color: 'red',
 			fontSize: '14px',
 		})
@@ -250,6 +264,23 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.style.fontSize).toBe('')
 	})
 
+	it('updates style from a getter that reads createTree style fields', ()=> {
+		const styles = createTree({
+			color: 'red',
+		})
+		const element = h('div', {
+			style: ()=> ({
+				color: styles.color,
+			}),
+		})
+
+		expect(element.style.color).toBe('red')
+
+		styles.color = 'blue'
+
+		expect(element.style.color).toBe('blue')
+	})
+
 	it('routes jsx automatic runtime calls through h', ()=> {
 		const element = jsx('section', {
 			className: 'panel',
@@ -265,8 +296,8 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('content')
 	})
 
-	it('supports reactive autoFocus via a signal', ()=> {
-		const focused = signal(false)
+	it('supports reactive autoFocus via a createSignal', ()=> {
+		const focused = createSignal(false)
 		const input = h('input', {
 			autoFocus: focused,
 		})
@@ -321,7 +352,7 @@ describe('jsx runtime static rendering', ()=> {
 
 	it('passes reactive props to function components', ()=> {
 		const Label = ({ text })=> h('label', null, text)
-		const text = signal('draft')
+		const text = createSignal('draft')
 		const element = h(Label, { text })
 
 		expect(element.textContent).toBe('draft')
@@ -562,7 +593,7 @@ describe('control flow: If and mountDynamic', ()=> {
 	})
 
 	it('switches branches reactively and disposes previous branch owner', ()=> {
-		const showA = signal(true)
+		const showA = createSignal(true)
 		const mountA = vi.fn()
 		const cleanupA = vi.fn()
 		const mountB = vi.fn()
@@ -607,8 +638,8 @@ describe('control flow: If and mountDynamic', ()=> {
 		expect(cleanupB).toHaveBeenCalledTimes(1)
 	})
 
-	it('supports trueBranch/falseBranch props', ()=> {
-		const visible = signal(true)
+	it('supports legacy trueBranch/falseBranch names for compatibility', ()=> {
+		const visible = createSignal(true)
 		const container = document.createElement('div')
 		document.body.appendChild(container)
 
@@ -631,7 +662,7 @@ describe('control flow: For list rendering', ()=> {
 	})
 
 	it('renders non-keyed lists, appends new rows, and removes trailing rows', ()=> {
-		const items = signal(['A', 'B'])
+		const items = createSignal(['A', 'B'])
 		const container = document.createElement('div')
 		document.body.appendChild(container)
 
@@ -661,7 +692,7 @@ describe('control flow: For list rendering', ()=> {
 		const a = { id: 'a', label: 'A' }
 		const b = { id: 'b', label: 'B' }
 		const c = { id: 'c', label: 'C' }
-		const list = signal([a, b, c])
+		const list = createSignal([a, b, c])
 
 		const Row = ({ item, index })=> {
 			onMount(()=> mount(item.id))
@@ -704,7 +735,7 @@ describe('control flow: For list rendering', ()=> {
 	it('recreates rows when object references change without explicit key', ()=> {
 		const mount = vi.fn()
 		const cleanup = vi.fn()
-		const list = signal([
+		const list = createSignal([
 			{ id: 'a', label: 'A' },
 			{ id: 'b', label: 'B' },
 		])
@@ -745,7 +776,7 @@ describe('control flow: For list rendering', ()=> {
 		const a = { id: 'a', label: 'A' }
 		const b = { id: 'b', label: 'B' }
 		const c = { id: 'c', label: 'C' }
-		const list = signal([a, b, c])
+		const list = createSignal([a, b, c])
 
 		const Row = ({ item, index })=> {
 			onMount(()=> mount(item.id))
