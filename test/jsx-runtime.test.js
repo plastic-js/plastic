@@ -14,6 +14,7 @@ import {
 	True,
 	appendChildren,
 	applyProps,
+	createContext,
 	createOwner,
 	createSignal,
 	createTree,
@@ -22,6 +23,7 @@ import {
 	jsx,
 	onMount,
 	renderApp,
+	useContext,
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
 import transformFlowControlPlugin from '../build/babel-plugin-transform-flow-control.js'
@@ -363,6 +365,82 @@ describe('jsx runtime static rendering', ()=> {
 		text('published')
 
 		expect(element.textContent).toBe('published')
+	})
+})
+
+describe('context api', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('returns default value when no Provider exists', ()=> {
+		const ThemeContext = createContext('light')
+		const Label = ()=> h('span', null, useContext(ThemeContext))
+		const container = document.createElement('div')
+
+		renderApp(container, h(Label))
+
+		expect(container.textContent).toBe('light')
+	})
+
+	it('reads the nearest Provider value', ()=> {
+		const ThemeContext = createContext('light')
+		const Label = ()=> h('span', null, useContext(ThemeContext))
+		const App = ()=> h(ThemeContext.Provider, {
+			value: 'dark',
+			children: ()=> h(Label),
+		})
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+
+		expect(container.textContent).toBe('dark')
+	})
+
+	it('supports nested Provider override', ()=> {
+		const ThemeContext = createContext('light')
+		const Label = ()=> h('span', null, useContext(ThemeContext))
+		const App = ()=> h(ThemeContext.Provider, {
+			value: 'outer',
+			children: ()=> h('section', null,
+				h(Label),
+				h(ThemeContext.Provider, {
+					value: 'inner',
+					children: ()=> h(Label),
+				}),
+			),
+		})
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+
+		expect(container.textContent).toBe('outerinner')
+	})
+
+	it('allows reactive values to flow through context', ()=> {
+		const CountContext = createContext(createSignal(0))
+		const Consumer = ()=> {
+			const count = useContext(CountContext)
+			return h('p', null, count)
+		}
+		const count = createSignal(1)
+		const App = ()=> h(CountContext.Provider, {
+			value: count,
+			children: ()=> h(Consumer),
+		})
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('1')
+
+		count(2)
+		expect(container.textContent).toBe('2')
+	})
+
+	it('throws when useContext runs outside component scope', ()=> {
+		const ThemeContext = createContext('light')
+
+		expect(()=> useContext(ThemeContext)).toThrow('useContext must be called within a component scope')
 	})
 })
 
@@ -891,6 +969,37 @@ describe('babel plugin: Either slot lazy transform', ()=> {
 
 		expect(code).toContain('trueBranch: () =>')
 		expect(code).toContain('falseBranch: () =>')
+		expect(code).not.toContain('children: [')
+	})
+})
+
+describe('babel plugin: Context.Provider lazy transform', ()=> {
+	it('rewrites Provider children to a lazy children factory prop', ()=> {
+		const source = `
+			const Theme = createContext('light')
+			const view = (
+				<Theme.Provider value="dark">
+					<p>A</p>
+				</Theme.Provider>
+			)
+		`
+
+		const transformed = transformSync(source, {
+			configFile: false,
+			babelrc: false,
+			presets: [[
+				'@babel/preset-react',
+				{
+					runtime: 'automatic',
+					importSource: 'jsx',
+				},
+			]],
+			plugins: [transformFlowControlPlugin],
+		})
+
+		const code = transformed?.code ?? ''
+
+		expect(code).toContain('children: () =>')
 		expect(code).not.toContain('children: [')
 	})
 })

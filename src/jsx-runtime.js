@@ -14,6 +14,8 @@ const OWNER = Symbol('owner')
 // Global context for effect scoping and cleanup tracking
 let currentOwner = null
 
+const CONTEXT_ID = Symbol('context-id')
+
 const getCurrentOwner = ()=> currentOwner
 
 const createOwner = (parent = null)=> {
@@ -22,6 +24,7 @@ const createOwner = (parent = null)=> {
 		children: new Set(),
 		cleanups: [],
 		effects: [],
+		contexts: new Map(),
 		mounts: [],
 		mounted: false,
 	}
@@ -139,6 +142,50 @@ const onUnmount = (fn)=> {
 		throw new Error('onUnmount must be called within a component scope')
 	}
 	currentOwner.cleanups.push(fn)
+}
+
+const createContext = (defaultValue)=> {
+	const context = {
+		[CONTEXT_ID]: Symbol('context'),
+		defaultValue,
+	}
+
+	// eslint-disable-next-line react/display-name
+	context.Provider = ({ value, children })=> {
+		if (!currentOwner){
+			throw new Error('Context Provider must be rendered within a component scope')
+		}
+
+		currentOwner.contexts.set(context[CONTEXT_ID], value)
+
+		if (typeof children === 'function'){
+			return children()
+		}
+
+		return children ?? null
+	}
+
+	return context
+}
+
+const useContext = (context)=> {
+	if (!context || typeof context !== 'object' || !(CONTEXT_ID in context)){
+		throw new Error('useContext requires a context created by createContext')
+	}
+
+	if (!currentOwner){
+		throw new Error('useContext must be called within a component scope')
+	}
+
+	let owner = currentOwner
+	while (owner){
+		if (owner.contexts.has(context[CONTEXT_ID])){
+			return owner.contexts.get(context[CONTEXT_ID])
+		}
+		owner = owner.parent
+	}
+
+	return context.defaultValue
 }
 
 const isReactivePrimitive = value=> isSignal(value) || isComputed(value)
@@ -488,6 +535,8 @@ export {
 	jsxs,
 	onMount,
 	onUnmount,
+	createContext,
+	useContext,
 	renderApp,
 	// Internal signal primitives (framework internals/tests)
 	createComputed,

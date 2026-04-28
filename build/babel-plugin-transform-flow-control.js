@@ -32,6 +32,28 @@ const plugin = function(babel){
 			JSXElement(path){
 				const { openingElement, children } = path.node
 
+				if (t.isJSXMemberExpression(openingElement.name) && t.isJSXIdentifier(openingElement.name.property, { name: 'Provider' })){
+					const meaningfulChildren = children.filter(child=> !(t.isJSXText(child) && child.value.trim() === ''))
+
+					if (meaningfulChildren.length > 0){
+						openingElement.attributes = openingElement.attributes.filter((attribute)=> {
+							if (!t.isJSXAttribute(attribute) || !t.isJSXIdentifier(attribute.name)){
+								return true
+							}
+
+							return attribute.name.name !== 'children'
+						})
+
+						const body = meaningfulChildren.length === 1 ? meaningfulChildren[0] : t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), meaningfulChildren)
+
+						openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('children'), t.jsxExpressionContainer(t.arrowFunctionExpression([], body))))
+
+						path.node.children = []
+					}
+
+					return
+				}
+
 				if (t.isJSXIdentifier(openingElement.name, { name: 'Either' })){
 					openingElement.attributes = openingElement.attributes.filter((attribute)=> {
 						if (!t.isJSXAttribute(attribute) || !t.isJSXIdentifier(attribute.name)){

@@ -10,6 +10,7 @@ import {
 	True,
 	createBindingEffect,
 	createComputed,
+	createContext,
 	createSignal,
 	createTree,
 	h,
@@ -18,6 +19,7 @@ import {
 	onMount,
 	registerCleanup,
 	renderApp,
+	useContext,
 } from './jsx-runtime.js'
 
 export {
@@ -40,5 +42,7 @@ export {
 	createBindingEffect as createEffect,
 	createComputed,
 	createSignal,
+	createContext,
+	useContext,
 }
 
