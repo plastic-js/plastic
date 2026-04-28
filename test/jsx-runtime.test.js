@@ -5,9 +5,12 @@ import {
 } from 'vitest'
 import { transformSync } from '@babel/core'
 import {
+	Case,
+	Default,
 	Either,
 	False,
 	Loop,
+	Match,
 	True,
 	appendChildren,
 	applyProps,
@@ -825,6 +828,41 @@ describe('control flow: Loop list rendering', ()=> {
 	})
 })
 
+describe('control flow: Match multi-branch rendering', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('supports value-based Case matching via when prop', ()=> {
+		const status = createSignal('idle')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		renderApp(container, h(Match, {
+			value: status,
+			cases: [
+				{
+					when: 'idle',
+					branch: ()=> h(Case, null, h('span', null, 'Idle')),
+				},
+				{
+					when: 'loading',
+					branch: ()=> h(Case, null, h('span', null, 'Loading')),
+				},
+			],
+			defaultBranch: ()=> h(Default, null, h('span', null, 'Unknown')),
+		}))
+
+		expect(container.textContent).toContain('Idle')
+
+		status('loading')
+		expect(container.textContent).toContain('Loading')
+
+		status('success')
+		expect(container.textContent).toContain('Unknown')
+	})
+})
+
 describe('babel plugin: Either slot lazy transform', ()=> {
 	it('rewrites <Either><True/><False/></Either> children into trueBranch/falseBranch factory props', ()=> {
 		const source = `
@@ -879,6 +917,39 @@ describe('babel plugin: ternary lazy transform', ()=> {
 		const code = transformed?.code ?? ''
 
 		expect(code).toContain('children: () => flag() ?')
+	})
+})
+
+describe('babel plugin: Match slot lazy transform', ()=> {
+	it('rewrites <Match><Case/><Default/></Match> children into case/default factory props', ()=> {
+		const source = `
+			const view = (
+				<Match value={state()}>
+					<Case when="idle"><p>Idle</p></Case>
+					<Default><p>Fallback</p></Default>
+				</Match>
+			)
+		`
+
+		const transformed = transformSync(source, {
+			configFile: false,
+			babelrc: false,
+			presets: [[
+				'@babel/preset-react',
+				{
+					runtime: 'automatic',
+					importSource: 'jsx',
+				},
+			]],
+			plugins: [transformIfPlugin],
+		})
+
+		const code = transformed?.code ?? ''
+
+		expect(code).toContain('cases: [')
+		expect(code).toContain('branch: () =>')
+		expect(code).toContain('defaultBranch: () =>')
+		expect(code).not.toContain('children: [')
 	})
 })
 

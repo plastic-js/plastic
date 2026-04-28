@@ -76,6 +76,8 @@ const createControlFlow = ({
 	// so the inactive branch is never evaluated until needed.
 	const True = ({ children })=> children
 	const False = ({ children })=> children
+	const Case = ({ children })=> children
+	const Default = ({ children })=> children
 
 	// <Either condition={...}>
 	//   <True>...</True>
@@ -100,6 +102,54 @@ const createControlFlow = ({
 			const cond = typeof condition === 'function' ? condition() : condition
 			const branch = cond ? activeTrue : activeFalse
 			return branch ? branch() : null
+		})
+
+		return fragment
+	}
+
+	// <Match value={...}>
+	//   <Case when={...}>...</Case>
+	//   <Default>...</Default>
+	// </Match>
+	//
+	// The Babel plugin rewrites Case/Default children into lazy factory props:
+	//   cases=[{ when, branch: () => <Case>...</Case> }, ...]
+	//   defaultBranch={() => <Default>...</Default>}
+	const Match = ({
+		value,
+		cases = [],
+		defaultBranch,
+	})=> {
+		const anchor = document.createComment('match')
+		const fragment = document.createDocumentFragment()
+		fragment.appendChild(anchor)
+
+		const resolve = (source)=> {
+			return typeof source === 'function' ? source() : source
+		}
+
+		mountDynamic(anchor, ()=> {
+			const activeCases = Array.isArray(cases) ? cases : []
+			const valueToMatch = resolve(value)
+
+			for (const slot of activeCases){
+				if (!slot || typeof slot !== 'object'){
+					continue
+				}
+
+				let matched = false
+				if (Object.prototype.hasOwnProperty.call(slot, 'when')){
+					matched = Object.is(valueToMatch, resolve(slot.when))
+				}
+
+				if (!matched){
+					continue
+				}
+
+				return typeof slot.branch === 'function' ? slot.branch() : null
+			}
+
+			return typeof defaultBranch === 'function' ? defaultBranch() : null
 		})
 
 		return fragment
@@ -245,6 +295,9 @@ const createControlFlow = ({
 		Either,
 		True,
 		False,
+		Match,
+		Case,
+		Default,
 		Loop,
 	}
 }

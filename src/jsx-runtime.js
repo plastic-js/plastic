@@ -392,6 +392,9 @@ const {
 	Either,
 	True,
 	False,
+	Match,
+	Case,
+	Default,
 	Loop,
 } = createControlFlow({
 	createOwner,
@@ -529,5 +532,8 @@ export {
 	Either,
 	True,
 	False,
+	Match,
+	Case,
+	Default,
 	Loop,
 }

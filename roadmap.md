@@ -75,10 +75,10 @@
 - [X] Dispose item owners and remove their nodes when items are removed from the list.
 
 ### `<Match>` Multi-branch Rendering
-- [ ] Implement `<Match>` with `<Case when={...}>` and `<Default>` slot components.
-- [ ] Support value-match style: `<Match value={x}><Case match="a">…</Case></Match>`.
-- [ ] Extend Babel plugin to lazily wrap `<Case>`/`<Default>` children as factory props.
-- [ ] Built on the same `mountDynamic` primitive as `<Either>`.
+- [X] Implement `<Match>` with `<Case when={...}>` and `<Default>` slot components.
+- [X] Support value-match style: `<Match value={x}><Case when="a">…</Case></Match>`.
+- [X] Extend Babel plugin to lazily wrap `<Case>`/`<Default>` children as factory props.
+- [X] Built on the same `mountDynamic` primitive as `<Either>`.
 
 ### Extras
 - [ ] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).

@@ -1,8 +1,11 @@
 import {
-	False,
-	Loop,
-	Fragment,
+	Case,
+	Default,
 	Either,
+	False,
+	Fragment,
+	Loop,
+	Match,
 	True,
 	createBindingEffect,
 	createComputed,
@@ -17,10 +20,13 @@ import {
 } from './jsx-runtime.js'
 
 export {
+	Case,
+	Default,
 	False,
 	createTree,
 	Loop,
 	Fragment,
+	Match,
 	Either,
 	True,
 	h,
