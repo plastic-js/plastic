@@ -2,6 +2,10 @@
 
 A lightweight custom JSX runtime that works as a web front-end framework. Inspired by the principles of [Solid.js](https://www.solidjs.com/), Plastic skips the Virtual DOM entirely and instead creates real DOM nodes directly, with fine-grained reactivity driven by [alien-signals](https://github.com/stackblitz/alien-signals).
 
+## Scope
+
+- **Client-side only (CSR)** — Plastic is designed for browser runtime usage and does **not** include or plan Server-Side Rendering (SSR) support.
+
 ## Features
 
 - **No Virtual DOM** — JSX compiles directly to DOM creation calls; no diffing, no reconciliation overhead.
