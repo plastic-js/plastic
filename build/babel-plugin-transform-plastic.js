@@ -24,7 +24,7 @@ const plugin = function(babel){
 	}
 
 	return {
-		name: 'transform-jsx-flow-control',
+		name: 'transform-jsx-plastic',
 		visitor: {
 			// Transform <Either condition={...}><True>…</True><False>…</False></Either>
 			// into     <Either condition={...} trueBranch={() => <True>…</True>} falseBranch={() => <False>…</False>} />
