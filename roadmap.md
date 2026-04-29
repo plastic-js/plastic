@@ -83,6 +83,7 @@
 ### Extras
 - [X] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
 - [X] `<Dynamic component={tag}>` — select component or HTML tag dynamically at runtime.
+- [X] Implement `createAsync(source)` helper that accepts a Promise or Promise factory and exposes `isLoading`, `data`, `error`, and `run`.
 - [ ] Guarantee deterministic update order between parent effects and child effects.
 - [ ] Implement a simple state management system using the tree API.
 - [X] Implement Context API for passing data through the component tree without prop drilling.
