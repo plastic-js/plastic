@@ -96,8 +96,11 @@ const createBindingEffect = (runner)=> {
 		// Set up computation context for onCleanup within the effect
 		const prevComp = getCurrentComputation()
 		setCurrentComputation({ cleanups: local })
-		runner()
-		setCurrentComputation(prevComp)
+		try {
+			runner()
+		} finally {
+			setCurrentComputation(prevComp)
+		}
 	})
 
 	if (!owner){
