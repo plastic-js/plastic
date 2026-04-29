@@ -1,6 +1,7 @@
 import {
 	Case,
 	Default,
+	Dynamic,
 	Either,
 	False,
 	Fragment,
@@ -25,6 +26,7 @@ import {
 export {
 	Case,
 	Default,
+	Dynamic,
 	False,
 	createTree,
 	Loop,

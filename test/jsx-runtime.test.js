@@ -7,6 +7,7 @@ import { transformSync } from '@babel/core'
 import {
 	Case,
 	Default,
+	Dynamic,
 	Either,
 	False,
 	Loop,
@@ -414,6 +415,34 @@ describe('jsx runtime static rendering', ()=> {
 		text('published')
 
 		expect(element.textContent).toBe('published')
+	})
+
+	it('renders Dynamic using component as h tag argument', ()=> {
+		const tag = 'section'
+		const element = h(Dynamic, {
+			component: tag,
+			className: 'panel',
+			children: 'content',
+		})
+
+		expect(element.tagName).toBe('SECTION')
+		expect(element.className).toBe('panel')
+		expect(element.textContent).toBe('content')
+	})
+
+	it('resolves Dynamic signal component during render without retagging existing DOM', ()=> {
+		const tag = createSignal('span')
+		const element = h('div', null, h(Dynamic, {
+			component: tag,
+			children: 'value',
+		}))
+
+		expect(element.firstChild.tagName).toBe('SPAN')
+
+		tag('strong')
+
+		expect(element.firstChild.tagName).toBe('SPAN')
+		expect(element.firstChild.textContent).toBe('value')
 	})
 })
 

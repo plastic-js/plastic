@@ -517,6 +517,13 @@ const {
 	registerCleanup,
 })
 
+// Thin runtime helper for <Dynamic component={tag} ...props />.
+// `component` is treated as the tag argument for `h`.
+const Dynamic = ({ component, ...props })=> {
+	const dynamicTag = isReactivePrimitive(component) ? component() : component
+	return h(dynamicTag, props)
+}
+
 const h = (tag, props, ...children)=> {
 	const nextProps = props || {}
 	const propChildren = nextProps.children ?? []
@@ -651,4 +658,5 @@ export {
 	Default,
 	Loop,
 	Portal,
+	Dynamic,
 }
