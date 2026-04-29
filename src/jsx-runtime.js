@@ -215,9 +215,15 @@ const JSX_PROP_MAP = {
 
 const createReactiveTextNode = (reactiveValue)=> {
 	const textNode = document.createTextNode('')
+	let prev = textNode.data
 
 	createBindingEffect(()=> {
-		textNode.data = normalizeTextNodeValue(reactiveValue())
+		const next = normalizeTextNodeValue(reactiveValue())
+		if (prev === next){
+			return
+		}
+		textNode.data = next
+		prev = next
 	})
 
 	return textNode
@@ -323,9 +329,16 @@ const clearDomProp = (element, key)=> {
 // Apply a prop value directly to the DOM. Reactive props reuse this same path inside effects.
 const setDomProp = (element, key, value)=> {
 	if (isBooleanDomProp(element, key)){
-		element[key] = Boolean(value)
+		const next = Boolean(value)
+		const prev = element[key]
+		const hasAttribute = element.hasAttribute(key)
+		if (prev === next && (next && hasAttribute || !next && !hasAttribute)){
+			return
+		}
 
-		if (value){
+		element[key] = next
+
+		if (next){
 			element.setAttribute(key, '')
 			return
 		}
@@ -335,16 +348,29 @@ const setDomProp = (element, key, value)=> {
 	}
 
 	if (value == null || value === false){
+		const prev = key in element ? element[key] : ''
+		if (prev === '' && !element.hasAttribute(key)){
+			return
+		}
 		clearDomProp(element, key)
 		return
 	}
 
 	if (key in element){
+		const prev = element[key]
+		if (prev === value){
+			return
+		}
 		element[key] = value
 		return
 	}
 
-	element.setAttribute(key, String(value))
+	const next = String(value)
+	const prev = element.getAttribute(key)
+	if (prev === next){
+		return
+	}
+	element.setAttribute(key, next)
 }
 
 const applyCommonAttribute = (element, key, source)=> {
