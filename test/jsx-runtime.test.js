@@ -73,6 +73,55 @@ describe('jsx runtime static rendering', ()=> {
 		expect(button.getAttribute('onClick')).toBeNull()
 	})
 
+	it('invokes function ref after mount with the DOM element', ()=> {
+		const ref = vi.fn()
+		const Component = ()=> h('div', {
+			ref,
+		}, 'panel')
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		renderApp(container, h(Component))
+
+		expect(ref).toHaveBeenCalledTimes(1)
+		const [element] = ref.mock.calls[0]
+		expect(element).toBeInstanceOf(HTMLElement)
+		expect(container.contains(element)).toBe(true)
+		expect(element.textContent).toBe('panel')
+	})
+
+	it('assigns function ref before onMount and clears it on dispose', ()=> {
+		let buttonEl = null
+		const seenInMount = vi.fn()
+		const Component = ()=> {
+			onMount(()=> {
+				seenInMount(buttonEl)
+			})
+
+			return h('button', {
+				ref: (el)=> {
+					buttonEl = el
+				},
+			}, 'Save')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const dispose = renderApp(container, h(Component))
+
+		expect(buttonEl).toBeInstanceOf(HTMLButtonElement)
+		expect(buttonEl.textContent).toBe('Save')
+		expect(container.contains(buttonEl)).toBe(true)
+		expect(seenInMount).toHaveBeenCalledTimes(1)
+		expect(seenInMount).toHaveBeenCalledWith(buttonEl)
+
+		dispose()
+
+		expect(buttonEl).toBe(null)
+	})
+
 	it('ignores unsupported event names', ()=> {
 		const onInvalid = vi.fn()
 		const button = h('button', {
@@ -402,13 +451,10 @@ describe('context api', ()=> {
 		const Label = ()=> h('span', null, useContext(ThemeContext))
 		const App = ()=> h(ThemeContext.Provider, {
 			value: 'outer',
-			children: ()=> h('section', null,
-				h(Label),
-				h(ThemeContext.Provider, {
-					value: 'inner',
-					children: ()=> h(Label),
-				}),
-			),
+			children: ()=> h('section', null, h(Label), h(ThemeContext.Provider, {
+				value: 'inner',
+				children: ()=> h(Label),
+			})),
 		})
 		const container = document.createElement('div')
 

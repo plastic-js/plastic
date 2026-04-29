@@ -25,6 +25,7 @@ const createOwner = (parent = null)=> {
 		cleanups: [],
 		effects: [],
 		contexts: new Map(),
+		refs: [],
 		mounts: [],
 		mounted: false,
 	}
@@ -36,6 +37,9 @@ const createOwner = (parent = null)=> {
 
 const runOwnerMounts = (owner)=> {
 	owner.children.forEach(child=> runOwnerMounts(child))
+	owner.refs.forEach((fn)=> {
+		fn()
+	})
 	owner.mounts.forEach((fn)=> {
 		fn()
 	})
@@ -77,6 +81,7 @@ const disposeOwner = (owner)=> {
 		}
 	})
 	owner.cleanups.length = 0
+	owner.refs.length = 0
 	owner.mounts.length = 0
 }
 
@@ -352,6 +357,29 @@ const applyCommonAttribute = (element, key, source)=> {
 	setDomProp(element, key, source)
 }
 
+const applyRefProp = (element, ref)=> {
+	if (typeof ref !== 'function'){
+		return
+	}
+
+	const assignRef = value=> ref(value)
+
+	const owner = currentOwner
+	if (owner){
+		owner.refs.push(()=> {
+			assignRef(element)
+		})
+	} else {
+		assignRef(element)
+	}
+
+	if (owner || getCurrentComputation()){
+		registerCleanup(()=> {
+			assignRef(null)
+		})
+	}
+}
+
 const applyProps = (element, props = {})=> {
 	const entries = Object.entries(props)
 	entries.forEach(([key, value])=> {
@@ -386,6 +414,11 @@ const applyProps = (element, props = {})=> {
 
 		if (key === 'style'){
 			applyStyleProp(element, value)
+			return
+		}
+
+		if (key === 'ref'){
+			applyRefProp(element, value)
 			return
 		}
 
@@ -573,6 +606,7 @@ export {
 	applyStyleObject,
 	clearStyleKey,
 	applyStyleProp,
+	applyRefProp,
 	clearDomProp,
 	setDomProp,
 	applyCommonAttribute,
