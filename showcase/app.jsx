@@ -1,17 +1,39 @@
 import {
 	Either,
 	False,
+	Link,
 	Loop,
 	Portal,
+	Route,
+	Router,
 	True,
 	createComputed,
 	createSignal,
 	createTree,
+	navigate,
 	onCleanup,
 	onMount,
 	renderApp,
 } from '../src/index.js'
 import './global.css'
+import PageOne from './pages/PageOne.jsx'
+import PageTwo from './pages/PageTwo.jsx'
+import PageOneA from './pages/PageOneA.jsx'
+import PageOneB from './pages/PageOneB.jsx'
+import PageTwoA from './pages/PageTwoA.jsx'
+import PageTwoB from './pages/PageTwoB.jsx'
+
+const PageTwoNotFound = ()=> (
+	<div className='checklist' style={{ marginTop: '10px' }}>
+		<h4>404</h4>
+		<p>
+			This nested route does not exist under
+			{' '}
+			<code>/page-two</code>
+			.
+		</p>
+	</div>
+)
 
 // ─── Components ───────────────────────────────────────────────────────────────
 
@@ -328,6 +350,32 @@ const app = (
 				Signals, computed values, and reactive prop bindings — DOM updates without a virtual DOM.
 			</p>
 		</header>
+		<section className='feature-card'>
+			<h2>Router navigation</h2>
+			<p className='feature-copy'>
+				Click links to switch route components. The browser URL updates with each navigation.
+			</p>
+			<div className='button-row' style={{ marginBottom: '12px' }}>
+				<Link style={{ textDecoration: 'none' }} to='/page-one'>Go to page one</Link>
+				<Link style={{ textDecoration: 'none' }} to='/page-two'>Go to page two</Link>
+			</div>
+			<div className='button-row' style={{ marginBottom: '12px' }}>
+				<Button onClick={()=> navigate('/page-one')}>Navigate to page one</Button>
+				<Button onClick={()=> navigate('/page-two')}>Navigate to page two</Button>
+			</div>
+			<Router>
+				<Route component={PageOne} path='/page-one'>
+					<Route component={PageOneA} index />
+					<Route component={PageOneA} path='/sub-a' />
+					<Route component={PageOneB} path='/sub-b' />
+				</Route>
+				<Route component={PageTwo} path='/page-two'>
+					<Route component={PageTwoA} path='/sub-a' />
+					<Route component={PageTwoB} path='/sub-b' />
+					<Route component={PageTwoNotFound} path='*' />
+				</Route>
+			</Router>
+		</section>
 		<section className='feature-card'>
 			<h2>Signals & function components</h2>
 			<p>Reactive signals passed as props stay live inside child components.</p>

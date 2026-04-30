@@ -95,8 +95,15 @@
 - [ ] Ensure that updates are applied in the correct order and that any necessary debouncing or batching strategies are implemented to optimize performance.
 
 # Routing
-- [ ] Implement a basic client-side router.
+- [X] Implement a basic client-side router.
+  - [X] Add a standalone `src/router.js` module so routing logic stays out of `jsx-runtime.js`.
+  - [X] Implement `<Router>` with History API navigation support, a reactive current-path signal, and browser navigation listeners.
+  - [X] Provide routing context with `currentPath`, `navigate`, and `createHref` helpers for child components.
+  - [X] Implement `<Route path="...">` with exact static-path matching and lazy rendering for the active branch only.
+  - [X] Implement `<Link to="...">` that renders a normal anchor `href` and intercepts internal left-click navigation.
+  - [X] Export router APIs from the public entry and cover initial render, route changes, link clicks, and back/forward navigation in tests.
 - [ ] Support route parameters and query strings.
-- [ ] Support nested routes and route guards.
-- [ ] Implement a Link component for navigation.
+- [X] Support nested routes and `Outlet`-based child route rendering.
+- [ ] Support route guards.
+- [X] Implement a Link component for navigation.
 - [ ] Support dynamic route matching and route transitions.

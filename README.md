@@ -16,6 +16,7 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - **Fragment support** — return multiple root nodes without a wrapper element.
 - **`<Either>` conditional rendering** — lazily renders only the active branch (`<True>`/`<False>`) via a comment-node anchor; inactive branches are never evaluated until the condition flips.
 - **`<Loop>` list rendering** — reconciles lists by object identity; reuses, moves, and disposes item rows with fine-grained owner tracking.
+- **Client-side routing** — `<Router>`, `<Route>`, `<Link>`, `navigate()`, and `<Outlet>` use the History API for static-path routing, including nested child routes.
 
 ## Lifecycle Semantics
 
@@ -39,3 +40,63 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - Node.js 18+
 - npm 9+
 
+## Routing
+
+Plastic ships with a lightweight client-side router built on top of the browser History API.
+
+### Available Router APIs
+
+- `<Router>` owns the current location signal and listens to browser navigation.
+- `<Route path="...">` renders only the active branch.
+- `<Link to="...">` renders a normal anchor and intercepts internal left-click navigation.
+- `navigate(to, options)` performs programmatic navigation.
+- `<Outlet />` renders the currently matched child route inside a parent route component.
+
+### Nested Routes
+
+Nested routes are declared by placing child `<Route>` elements inside a parent `<Route>`. Parent route components render their active child branch through `<Outlet />`.
+
+```jsx
+import {
+	Link,
+	Outlet,
+	Route,
+	Router,
+	navigate,
+} from 'jsx'
+
+const Settings = ()=> (
+	<div>
+		<h2>Settings</h2>
+		<nav>
+			<Link to='/settings'>Overview</Link>
+			<Link to='/settings/profile'>Profile</Link>
+			<Link to='/settings/security'>Security</Link>
+		</nav>
+		<Outlet />
+	</div>
+)
+
+const SettingsOverview = ()=> <p>Overview page</p>
+const SettingsProfile = ()=> <p>Profile page</p>
+const SettingsSecurity = ()=> <p>Security page</p>
+
+const App = ()=> (
+	<Router>
+		<Route component={Settings} path='/settings'>
+			<Route index component={SettingsOverview} />
+			<Route component={SettingsProfile} path='/profile' />
+			<Route component={SettingsSecurity} path='/security' />
+		</Route>
+	</Router>
+)
+
+navigate('/settings/profile')
+```
+
+### Matching Semantics
+
+- Leaf routes use exact static-path matching.
+- Parent routes that declare child `<Route>` elements use prefix matching so they stay mounted while nested child routes switch underneath them.
+- Nested child paths are resolved relative to their parent route. For example, a child `path='/profile'` inside a parent `path='/settings'` matches `/settings/profile`.
+- `index` routes match the parent path itself and render through the parent component's `<Outlet />`.

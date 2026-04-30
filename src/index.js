@@ -22,6 +22,13 @@ import {
 	renderApp,
 	useContext,
 } from './jsx-runtime.js'
+import {
+	Link,
+	navigate,
+	Outlet,
+	Route,
+	Router,
+} from './router.js'
 
 export {
 	Case,
@@ -29,11 +36,16 @@ export {
 	Dynamic,
 	False,
 	createTree,
+	Link,
+	navigate,
 	Loop,
+	Outlet,
 	Fragment,
 	Match,
 	Either,
 	Portal,
+	Route,
+	Router,
 	True,
 	h,
 	jsx,
