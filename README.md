@@ -29,6 +29,7 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - **Reactive DOM props**: signals, computed values, and getter sources can drive common DOM props (for example `value`, `title`, `disabled`, `placeholder`) through a shared binding path.
 - **Reactive `className`**: class tokens are added and removed incrementally so stale class names are cleaned up when state changes.
 - **Reactive `style` object**: style keys are diffed by key; removed keys are cleared from the element to avoid stale inline styles.
+- **Event binding is one-time**: intrinsic `onXxx` props are bound as plain handlers when the node mounts. The reactive Babel transform intentionally does not wrap event expressions into thunks, so patterns like `onClick={flag() ? fnA : fnB}` do not rebind when `flag` changes.
 - **JSX-to-DOM prop normalization**: camelCase JSX props like `autoFocus`, `autoComplete`, `autoPlay`, `encType`, and `hrefLang` are normalized to the browser-exposed DOM keys before apply.
 - **Mount/dispose API**: `renderApp(container, node)` returns an idempotent disposer that unmounts DOM and disposes owner/effect scopes.
 - **Lifecycle hooks**: `onMount` and cleanup registration (`onCleanup` wrapper) are available for component-level setup and teardown.

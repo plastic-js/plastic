@@ -196,7 +196,7 @@ const useContext = (context)=> {
 	return context.defaultValue
 }
 
-const isReactivePrimitive = value=> isSignal(value) || isComputed(value)
+const isReactivePrimitive = value=> value != null && (isSignal(value) || isComputed(value))
 const isReactive = value=> isReactivePrimitive(value) || typeof value === 'function'
 const createPlaceholder = ()=> document.createComment('null')
 const isSupportedEvent = (element, eventName)=> `on${eventName}` in element
@@ -213,12 +213,41 @@ const JSX_PROP_MAP = {
 	hrefLang: 'hreflang',
 }
 
+const MAX_REACTIVE_RESOLVE_STEPS = 16
+
+const resolveReactiveValue = (value)=> {
+	let resolved = value
+	let steps = 0
+
+	while (steps < MAX_REACTIVE_RESOLVE_STEPS){
+		if (resolved == null){
+			break
+		}
+
+		if (isSignal(resolved) || isComputed(resolved)){
+			resolved = resolved()
+			steps++
+			continue
+		}
+
+		if (typeof resolved === 'function'){
+			resolved = resolved()
+			steps++
+			continue
+		}
+
+		break
+	}
+
+	return resolved
+}
+
 const createReactiveTextNode = (reactiveValue)=> {
 	const textNode = document.createTextNode('')
 	let prev = textNode.data
 
 	createBindingEffect(()=> {
-		const next = normalizeTextNodeValue(reactiveValue())
+		const next = normalizeTextNodeValue(resolveReactiveValue(reactiveValue))
 		if (prev === next){
 			return
 		}
@@ -227,6 +256,40 @@ const createReactiveTextNode = (reactiveValue)=> {
 	})
 
 	return textNode
+}
+
+const createReactiveChildNode = (reactiveValue)=> {
+	const start = document.createComment('dynamic-start')
+	const end = document.createComment('dynamic-end')
+	const fragment = document.createDocumentFragment()
+	fragment.append(start, end)
+	let mountedNodes = []
+
+	createBindingEffect(()=> {
+		const nextNode = node2Element(resolveReactiveValue(reactiveValue))
+		const parent = end.parentNode
+		if (!parent){
+			return
+		}
+
+		mountedNodes.forEach((node)=> {
+			if (node.parentNode === parent){
+				parent.removeChild(node)
+			}
+		})
+		mountedNodes = []
+
+		if (nextNode instanceof DocumentFragment){
+			mountedNodes = [...nextNode.childNodes]
+			parent.insertBefore(nextNode, end)
+			return
+		}
+
+		mountedNodes = [nextNode]
+		parent.insertBefore(nextNode, end)
+	})
+
+	return fragment
 }
 
 const applyClassNameMap = (element, classNameMap)=> {
@@ -253,7 +316,7 @@ const applyClassNameMap = (element, classNameMap)=> {
 const applyClassProp = (element, value)=> {
 	if (isReactive(value)){
 		createBindingEffect(()=> {
-			const expectedClass = toClassMap(value())
+			const expectedClass = toClassMap(resolveReactiveValue(value))
 			const actualClass = new Set(element.classList)
 			const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
 			const combinedClassMap = new Map([...expectedClass, ...shouldRemove.map(className=> [className, false])])
@@ -291,7 +354,7 @@ const applyStyleProp = (element, value)=> {
 	if (isReactive(value)){
 		let prevKeys = new Set()
 		createBindingEffect(()=> {
-			const resolved = value()
+			const resolved = resolveReactiveValue(value)
 			if (typeof resolved === 'string' || resolved == null){
 				element.style.cssText = resolved ?? ''
 				prevKeys = new Set()
@@ -376,7 +439,7 @@ const setDomProp = (element, key, value)=> {
 const applyCommonAttribute = (element, key, source)=> {
 	if (isReactive(source)){
 		createBindingEffect(()=> {
-			setDomProp(element, key, source())
+			setDomProp(element, key, resolveReactiveValue(source))
 		})
 		return
 	}
@@ -457,12 +520,13 @@ const applyProps = (element, props = {})=> {
 // Normalize any JSX return value into a DOM node that can be appended safely.
 const node2Element = (node)=> {
 	if (node === null || node === undefined){
-		console.error('null node', 1)
 		return createPlaceholder()
 	}
-	// reactive，但是不一定是text，目前假定他是text，for simplicity
-	if (isReactive(node)){
+	if (isReactivePrimitive(node)){
 		return createReactiveTextNode(node)
+	}
+	if (typeof node === 'function'){
+		return createReactiveChildNode(node)
 	}
 	if (typeof node === 'string' || typeof node === 'number'){
 		return document.createTextNode(String(node))

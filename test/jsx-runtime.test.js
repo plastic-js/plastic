@@ -3,7 +3,6 @@
 import {
 	afterEach, describe, expect, it, vi,
 } from 'vitest'
-import { transformSync } from '@babel/core'
 import {
 	Case,
 	Default,
@@ -27,8 +26,6 @@ import {
 	useContext,
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
-import transformPlasticPlugin from '../build/babel-plugin-transform-plastic.js'
-import transformTernaryPlugin from '../build/babel-plugin-transform-ternary.js'
 
 describe('jsx runtime static rendering', ()=> {
 	afterEach(()=> {
@@ -180,6 +177,36 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.getAttribute('aria-label')).toBe('Grace Lovelace')
 	})
 
+	it('resolves nested function wrappers for attributes, className, and style', ()=> {
+		const state = createTree({
+			title: 'draft',
+			className: 'card ready',
+			color: 'red',
+		})
+
+		const element = h('div', {
+			title: ()=> ()=> state.title,
+			className: ()=> ()=> state.className,
+			style: ()=> ()=> ({
+				color: state.color,
+			}),
+		})
+
+		expect(element.title).toBe('draft')
+		expect(element.classList.contains('card')).toBe(true)
+		expect(element.classList.contains('ready')).toBe(true)
+		expect(element.style.color).toBe('red')
+
+		state.title = 'published'
+		state.className = 'card active'
+		state.color = 'blue'
+
+		expect(element.title).toBe('published')
+		expect(element.classList.contains('ready')).toBe(false)
+		expect(element.classList.contains('active')).toBe(true)
+		expect(element.style.color).toBe('blue')
+	})
+
 	it('updates dynamic boolean props from a createSignal source', ()=> {
 		const disabled = createSignal(true)
 		const checked = createSignal(true)
@@ -279,6 +306,25 @@ describe('jsx runtime static rendering', ()=> {
 		state.count = 2
 
 		expect(element.textContent).toBe('{"count":2}')
+	})
+
+	it('renders function-wrapped children as DOM and updates branch content', ()=> {
+		const state = createTree({
+			show: true,
+			label: 'A',
+		})
+
+		const element = h('div', null, ()=> state.show ? h('strong', null, state.label) : null)
+
+		expect(element.querySelector('strong')).not.toBeNull()
+		expect(element.textContent).toBe('A')
+
+		state.label = 'B'
+		expect(element.textContent).toBe('B')
+
+		state.show = false
+		expect(element.querySelector('strong')).toBeNull()
+		expect(element.textContent).toBe('')
 	})
 
 	it('updates style from a reactive string and clears on null', ()=> {
@@ -415,6 +461,56 @@ describe('jsx runtime static rendering', ()=> {
 		text('published')
 
 		expect(element.textContent).toBe('published')
+	})
+
+	it('lets child consume static and reactive props from parent', ()=> {
+		const Child = ({ title, value, unit })=> h('p', {
+			'aria-label': title,
+		}, title, ': ', value, unit)
+
+		const Parent = ()=> {
+			const count = createSignal(1)
+			return h('section', null,
+				h(Child, {
+					title: 'Count',
+					value: count,
+					unit: ' pts',
+				}),
+				h('button', {
+					onClick: ()=> count(count() + 1),
+				}, 'inc'))
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		const label = container.querySelector('p')
+		const button = container.querySelector('button')
+
+		expect(label.getAttribute('aria-label')).toBe('Count')
+		expect(label.textContent).toBe('Count: 1 pts')
+
+		button.click()
+
+		expect(label.textContent).toBe('Count: 2 pts')
+	})
+
+	it('keeps child render in sync when parent passes computed prop', ()=> {
+		const count = createSignal(2)
+		const scoreText = ()=> `score:${count()}`
+		const Child = ({ summary })=> h('strong', null, summary)
+		const Parent = ()=> h(Child, {
+			summary: scoreText,
+		})
+
+		const element = h(Parent)
+
+		expect(element.textContent).toBe('score:2')
+
+		count(9)
+
+		expect(element.textContent).toBe('score:9')
 	})
 
 	it('renders Dynamic using component as h tag argument', ()=> {
@@ -1013,127 +1109,6 @@ describe('control flow: Match multi-branch rendering', ()=> {
 
 		status('success')
 		expect(container.textContent).toContain('Unknown')
-	})
-})
-
-describe('babel plugin: Either slot lazy transform', ()=> {
-	it('rewrites <Either><True/><False/></Either> children into trueBranch/falseBranch factory props', ()=> {
-		const source = `
-			const view = (
-				<Either condition={flag()}>
-					<True><p>A</p></True>
-					<False><p>B</p></False>
-				</Either>
-			)
-		`
-
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'automatic',
-					importSource: 'jsx',
-				},
-			]],
-			plugins: [transformPlasticPlugin],
-		})
-
-		const code = transformed?.code ?? ''
-
-		expect(code).toContain('trueBranch: () =>')
-		expect(code).toContain('falseBranch: () =>')
-		expect(code).not.toContain('children: [')
-	})
-})
-
-describe('babel plugin: Context.Provider lazy transform', ()=> {
-	it('rewrites Provider children to a lazy children factory prop', ()=> {
-		const source = `
-			const Theme = createContext('light')
-			const view = (
-				<Theme.Provider value="dark">
-					<p>A</p>
-				</Theme.Provider>
-			)
-		`
-
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'automatic',
-					importSource: 'jsx',
-				},
-			]],
-			plugins: [transformPlasticPlugin],
-		})
-
-		const code = transformed?.code ?? ''
-
-		expect(code).toContain('children: () =>')
-		expect(code).not.toContain('children: [')
-	})
-})
-
-describe('babel plugin: ternary lazy transform', ()=> {
-	it('wraps JSX ternary expressions in a lazy factory function', ()=> {
-		const source = `
-			const view = <section>{flag() ? <p>A</p> : <p>B</p>}</section>
-		`
-
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'automatic',
-					importSource: 'jsx',
-				},
-			]],
-			plugins: [transformTernaryPlugin],
-		})
-
-		const code = transformed?.code ?? ''
-
-		expect(code).toContain('children: () => flag() ?')
-	})
-})
-
-describe('babel plugin: Match slot lazy transform', ()=> {
-	it('rewrites <Match><Case/><Default/></Match> children into case/default factory props', ()=> {
-		const source = `
-			const view = (
-				<Match value={state()}>
-					<Case when="idle"><p>Idle</p></Case>
-					<Default><p>Fallback</p></Default>
-				</Match>
-			)
-		`
-
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'automatic',
-					importSource: 'jsx',
-				},
-			]],
-			plugins: [transformPlasticPlugin],
-		})
-
-		const code = transformed?.code ?? ''
-
-		expect(code).toContain('cases: [')
-		expect(code).toContain('branch: () =>')
-		expect(code).toContain('defaultBranch: () =>')
-		expect(code).not.toContain('children: [')
 	})
 })
 

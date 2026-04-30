@@ -70,6 +70,53 @@ const Button = ({
 	</button>
 )
 
+const ChildProfileCard = ({
+	title,
+	name,
+	level,
+	note,
+	profile,
+})=> (
+	<div className='checklist'>
+		<p>
+			<strong>
+				{title}
+			</strong>
+		</p>
+		<p>
+			Name:
+			{' '}
+			<span>
+				{name}
+			</span>
+		</p>
+		<p>
+			Level:
+			{' '}
+			<span>
+				{level}
+			</span>
+		</p>
+		<p>
+			{note}
+		</p>
+		<p>
+			Role:
+			{' '}
+			<span>
+				{profile.role}
+			</span>
+		</p>
+		<p>
+			Streak days:
+			{' '}
+			<span>
+				{profile.streak}
+			</span>
+		</p>
+	</div>
+)
+
 // ─── Signals & Function Components ───────────────────────────────────────────
 
 const count = createSignal(0)
@@ -80,6 +127,14 @@ const status = createComputed(()=> {
 const tagVariant = createComputed(()=> {
 	if (count() >= 5){ return 'danger' }
 	return count() >= 2 ? 'warning' : 'info'
+})
+
+const profileName = createSignal('Ava')
+const profileLevel = createSignal(1)
+const profileNote = createComputed(()=> profileLevel() >= 3 ? 'Ready for advanced tasks' : 'Keep building fundamentals')
+const profileTree = createTree({
+	role: 'Builder',
+	streak: 3,
 })
 
 // ─── Event Binding ────────────────────────────────────────────────────────────
@@ -151,6 +206,48 @@ const obj1 = {
 }
 const obj2 = { background: '#e8f5e9', padding: '8px 12px' }
 const reactiveStyle = createComputed(()=> styleMode() === 'highlight' ? obj1 : obj2)
+
+// ─── Function-Wrapped Dynamics (Babel reactive transform target) ────────────
+
+const wrappedState = createTree({
+	showBadge: true,
+	title: 'Draft release',
+	statusText: 'warming up',
+	className: 'profile-card tone-amber',
+	background: '#fff7ed',
+	border: '#fdba74',
+})
+
+const toggleWrappedBadge = ()=> {
+	wrappedState.showBadge = !wrappedState.showBadge
+}
+
+const cycleWrappedTone = ()=> {
+	if (wrappedState.className.includes('tone-amber')){
+		wrappedState.className = 'profile-card tone-teal'
+		wrappedState.background = '#ecfeff'
+		wrappedState.border = '#67e8f9'
+		wrappedState.statusText = 'steady'
+		return
+	}
+
+	if (wrappedState.className.includes('tone-teal')){
+		wrappedState.className = 'profile-card tone-coral'
+		wrappedState.background = '#fff1f2'
+		wrappedState.border = '#fda4af'
+		wrappedState.statusText = 'spiking'
+		return
+	}
+
+	wrappedState.className = 'profile-card tone-amber'
+	wrappedState.background = '#fff7ed'
+	wrappedState.border = '#fdba74'
+	wrappedState.statusText = 'warming up'
+}
+
+const updateWrappedTitle = ()=> {
+	wrappedState.title = wrappedState.title === 'Draft release' ? 'Production release' : 'Draft release'
+}
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
@@ -389,6 +486,34 @@ const app = (
 			</div>
 		</section>
 		<section className='feature-card'>
+			<h2>Parent to child props</h2>
+			<p>Parent passes static and reactive props; child consumes them directly in its own JSX.</p>
+			<ChildProfileCard
+				level={profileLevel}
+				name={profileName}
+				note={profileNote}
+				profile={profileTree}
+				title='Child renderer'
+			/>
+			<div className='button-row'>
+				<Button onClick={()=> profileName(profileName() === 'Ava' ? 'Liam' : 'Ava')}>Toggle name</Button>
+				<Button onClick={()=> profileLevel(profileLevel() + 1)}>Level up</Button>
+				<Button onClick={()=> {
+					profileTree.role = profileTree.role === 'Builder' ? 'Architect' : 'Builder'
+				}}
+				>
+					Toggle role (tree)
+				</Button>
+				<Button onClick={()=> {
+					profileTree.streak += 1
+				}}
+				>
+					+1 streak (tree)
+				</Button>
+				<Button onClick={()=> profileLevel(1)}>Reset level</Button>
+			</div>
+		</section>
+		<section className='feature-card'>
 			<h2>Event binding</h2>
 			<p className='feature-copy'>
 				The runtime supports
@@ -564,6 +689,39 @@ const app = (
 					<Button onClick={()=> styleMode(styleMode() === 'highlight' ? 'success' : 'highlight')}>Switch style</Button>
 					<Button disabled={locked}>Reactive disabled</Button>
 				</div>
+			</div>
+		</section>
+		<section className='feature-card'>
+			<h2>Function-wrapped dynamics</h2>
+			<p className='feature-copy'>
+				The Babel plugin wraps dynamic JSX values into functions. This section verifies wrapped
+				children, attributes, className, and style all stay reactive.
+			</p>
+			<div
+				aria-label={()=> ()=> `status:${wrappedState.statusText}`}
+				className={wrappedState.className}
+				style={()=> ()=> ({
+					background: wrappedState.background,
+					borderLeft: `4px solid ${wrappedState.border}`,
+					padding: '14px',
+					borderRadius: '10px',
+				})}
+				title={()=> ()=> wrappedState.title}
+			>
+				<strong>
+					{()=> ()=> wrappedState.title}
+				</strong>
+				<p>
+					Current status:
+					{' '}
+					{ wrappedState.statusText}
+				</p>
+				{ wrappedState.showBadge ? <Tag variant='warning'>Wrapped child node is mounted</Tag> : null}
+			</div>
+			<div className='button-row'>
+				<Button onClick={toggleWrappedBadge}>Toggle wrapped child</Button>
+				<Button onClick={cycleWrappedTone}>Cycle wrapped class/style</Button>
+				<Button onClick={updateWrappedTitle}>Toggle wrapped title</Button>
 			</div>
 		</section>
 		<section className='feature-card'>

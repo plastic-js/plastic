@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
 import babel from 'vite-plugin-babel'
 import path from 'path'
-import babelTernary from './build/babel-plugin-transform-ternary.js'
-import babelPlastic from './build/babel-plugin-transform-plastic.js'
+import babelReactive from './build/babel-plugin-transform-jsx-reactive.js'
+import babelControlFlow from './build/babel-plugin-transform-jsx-control-flow.js'
 
 export default defineConfig({
 	root: 'showcase',
@@ -18,7 +18,7 @@ export default defineConfig({
 						},
 					],
 				],
-				plugins: [babelTernary, babelPlastic],
+				plugins: [babelReactive, babelControlFlow],
 			},
 		}),
 	],
