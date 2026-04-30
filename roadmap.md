@@ -88,12 +88,6 @@
 - [ ] Implement a simple state management system using the tree API.
 - [X] Implement Context API for passing data through the component tree without prop drilling.
 
-## Performance Optimization
-- [X] Avoid unnecessary DOM writes when a reactive prop resolves to the same value.
-- [ ] Batch multiple signal-triggered DOM updates in the same microtask.
-- [ ] Implement batching updates to ensure that multiple signal modifications within the same microtask only trigger.
-- [ ] Ensure that updates are applied in the correct order and that any necessary debouncing or batching strategies are implemented to optimize performance.
-
 # Routing
 - [X] Implement a basic client-side router.
   - [X] Add a standalone `src/router.js` module so routing logic stays out of `jsx-runtime.js`.
@@ -107,3 +101,9 @@
 - [ ] Support route guards.
 - [X] Implement a Link component for navigation.
 - [ ] Support dynamic route matching and route transitions.
+
+## Performance Optimization
+- [X] Avoid unnecessary DOM writes when a reactive prop resolves to the same value.
+- [ ] Batch multiple signal-triggered DOM updates in the same microtask.
+- [ ] Implement batching updates to ensure that multiple signal modifications within the same microtask only trigger.
+- [ ] Ensure that updates are applied in the correct order and that any necessary debouncing or batching strategies are implemented to optimize performance.
