@@ -24,10 +24,10 @@ import {
 } from './jsx-runtime.js'
 import {
 	Link,
-	navigate,
 	Outlet,
 	Route,
 	Router,
+	navigate,
 } from './router.js'
 
 export {

@@ -583,8 +583,14 @@ const {
 
 // Thin runtime helper for <Dynamic component={tag} ...props />.
 // `component` is treated as the tag argument for `h`.
+
 const Dynamic = ({ component, ...props })=> {
-	const dynamicTag = isReactivePrimitive(component) ? component() : component
+	// Resolve signals/computed directly; also resolve zero-arg accessor thunks produced
+	// by the Babel reactive plugin when `component` is a dynamic expression.
+	let dynamicTag = component
+	if (isReactivePrimitive(component) || typeof component === 'function' && component.length === 0){
+		dynamicTag = resolveReactiveValue(component)
+	}
 	return h(dynamicTag, props)
 }
 

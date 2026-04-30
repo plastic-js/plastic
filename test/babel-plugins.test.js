@@ -148,7 +148,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 		expect(code).toContain('title: () => state.title')
 	})
 
-	it('does not wrap component props or intrinsic event handlers', ()=> {
+	it('wraps dynamic component props but does not wrap event handlers or static identifiers', ()=> {
 		const source = `
 			const view = <><Button label={state.label} /><button onClick={handlers.save} disabled={locked} /></>
 		`
@@ -168,10 +168,12 @@ describe('babel plugin: ternary lazy transform', ()=> {
 
 		const code = transformed?.code ?? ''
 
-		expect(code).toContain('label: state.label')
-		expect(code).not.toContain('label: () => state.label')
+		// component prop with dynamic MemberExpression — should be wrapped
+		expect(code).toContain('label: () => state.label')
+		// intrinsic event handler — must never be wrapped
 		expect(code).toContain('onClick: handlers.save')
 		expect(code).not.toContain('onClick: () => handlers.save')
+		// static identifier on intrinsic element — must not be wrapped
 		expect(code).toContain('disabled: locked')
 		expect(code).not.toContain('disabled: () => locked')
 	})
@@ -1088,7 +1090,7 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 		expect(input.value).toBe('[object Object]')
 	})
 
-	it('does not wrap component primitive props, so createTree field snapshots can become stale', ()=> {
+	it('wraps dynamic component props as accessor thunks so createTree field updates are reactive', ()=> {
 		const { code, App } = compileComponent(`
 			const Child = ({ label }) => <span>{label}</span>
 			const App = ({ state }) => <Child label={state.label} />
@@ -1103,15 +1105,14 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 			state,
 		}))
 
-		expect(code).toContain('label: state.label')
-		expect(code).not.toContain('label: () => state.label')
+		expect(code).toContain('label: () => state.label')
 		expect(container.textContent).toBe('Todo')
 
 		state.label = 'Done'
-		expect(container.textContent).toBe('Todo')
+		expect(container.textContent).toBe('Done')
 	})
 
-	it('keeps Dynamic component tag static when tag comes from createTree field in compiled component props', ()=> {
+	it('wraps Dynamic component prop as accessor thunk so tag updates from createTree are reactive', ()=> {
 		const source = `
 			const App = ({ state }) => <Dynamic component={state.tag}>Value</Dynamic>
 		`
@@ -1143,8 +1144,7 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 			state,
 		}))
 
-		expect(code).toContain('component: state.tag')
-		expect(code).not.toContain('component: () => state.tag')
+		expect(code).toContain('component: () => state.tag')
 		expect(container.firstChild.tagName).toBe('SPAN')
 
 		state.tag = 'strong'

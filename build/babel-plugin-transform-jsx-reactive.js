@@ -203,22 +203,22 @@ const plugin = function(babel){
 			},
 
 			/**
-			 * Wrap dynamic expressions on intrinsic element attributes.
+			 * Wrap dynamic expressions on JSX element attributes (both intrinsic and
+			 * component elements).
 			 *
 			 * `<input value={signal()} />`  → `<input value={() => signal()} />`
+			 * `<Child count={state.count} />` → `<Child count={() => state.count} />`
 			 *
 			 * Excluded:
-			 *  - Component (upper-case) elements — their props are handled by the
-			 *    component itself, not by the DOM binding layer.
 			 *  - Event handlers (`onXxx`) — consumed directly as function values.
 			 *  - `ref` — the runtime reads it as a plain callback.
+			 *  - `children` — managed separately (as JSX children or lazy factories).
 			 *  - Already-static expressions — no wrapper needed.
 			 */
 			JSXAttribute(path){
 				const attributeName = path.node.name
-				const parentName = path.parent.name
 
-				if (!t.isJSXIdentifier(attributeName) || !isIntrinsicElementName(parentName)){
+				if (!t.isJSXIdentifier(attributeName)){
 					return
 				}
 
@@ -226,7 +226,7 @@ const plugin = function(babel){
 					return
 				}
 
-				if (isEventPropName(attributeName.name) || attributeName.name === 'ref'){
+				if (isEventPropName(attributeName.name) || attributeName.name === 'ref' || attributeName.name === 'children'){
 					return
 				}
 
