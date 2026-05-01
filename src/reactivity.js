@@ -57,7 +57,7 @@
  */
 
 import {
-	computed, effect, getActiveSub, isComputed, isSignal, setActiveSub, signal,
+	computed, effect, endBatch, getActiveSub, isComputed, isSignal, setActiveSub, signal, startBatch,
 } from 'alien-signals'
 import { isObject } from './utils.js'
 
@@ -351,6 +351,15 @@ const toRaw = (value)=> {
 	return raw ? toRaw(raw) : value
 }
 
+const batch = (fn)=> {
+	startBatch()
+	try {
+		return fn()
+	} finally {
+		endBatch()
+	}
+}
+
 export {
-	effect, isComputed, isSignal, isTree, toRaw, createSignal, createTree, computed as createComputed,
+	batch, effect, isComputed, isSignal, isTree, toRaw, createSignal, createTree, computed as createComputed,
 }

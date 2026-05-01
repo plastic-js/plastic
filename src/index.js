@@ -38,6 +38,7 @@ import {
 	useRoute,
 	useSearchParams,
 } from './router.js'
+import { batch } from './reactivity.js'
 
 export {
 	Case,
@@ -76,5 +77,6 @@ export {
 	createSignal,
 	createContext,
 	useContext,
+	batch,
 }
 

@@ -2,7 +2,7 @@ import {
 	describe, expect, it,
 } from 'vitest'
 import {
-	createSignal, createTree, effect,
+	batch, createSignal, createTree, effect,
 } from '../src/reactivity.js'
 
 describe('createTree key tracking guard', ()=> {
@@ -301,5 +301,61 @@ describe('createSignal and createTree wrappers', ()=> {
 		})
 
 		expect(parent.child).toBe(child)
+	})
+})
+
+describe('batch', ()=> {
+	it('flushes effects once after multiple writes', ()=> {
+		const count = createSignal(0)
+		const seen = []
+
+		effect(()=> {
+			seen.push(count())
+		})
+
+		batch(()=> {
+			count(1)
+			count(2)
+			count(3)
+		})
+
+		expect(seen).toEqual([0, 3])
+	})
+
+	it('supports nested batch calls', ()=> {
+		const value = createSignal(0)
+		const seen = []
+
+		effect(()=> {
+			seen.push(value())
+		})
+
+		batch(()=> {
+			value(1)
+			batch(()=> {
+				value(2)
+			})
+			value(3)
+		})
+
+		expect(seen).toEqual([0, 3])
+	})
+
+	it('flushes pending updates even when callback throws', ()=> {
+		const value = createSignal(0)
+		const seen = []
+
+		effect(()=> {
+			seen.push(value())
+		})
+
+		expect(()=> {
+			batch(()=> {
+				value(1)
+				throw new Error('boom')
+			})
+		}).toThrow('boom')
+
+		expect(seen).toEqual([0, 1])
 	})
 })
