@@ -634,6 +634,35 @@ const useSearchParams = ()=> {
 	return [()=> location().query, setSearchParams]
 }
 
+const useMatch = (path)=> {
+	const location = useLocation()
+	const resolveTargetPath = ()=> {
+		const target = typeof path === 'function' ? path() : path
+		if (target === '*'){
+			return '*'
+		}
+		return stripQueryAndHash(normalizeTarget(target))
+	}
+
+	return ()=> {
+		const targetPath = resolveTargetPath()
+		if (targetPath === '*'){
+			return true
+		}
+
+		const currentPath = location().pathname
+		if (targetPath.includes(':')){
+			return createRouteMatcher(targetPath).matchExact(currentPath) !== null
+		}
+
+		return isNavLinkActive({
+			currentPath,
+			targetPath,
+			end: false,
+		})
+	}
+}
+
 const isPlainLeftClick = event=> event.button === 0 && !event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey
 
 const resolveLinkTarget = to=> normalizeTarget(typeof to === 'function' ? to() : to)
@@ -789,6 +818,7 @@ export {
 	Route,
 	Router,
 	useLocation,
+	useMatch,
 	useNavigate,
 	useNavigationState,
 	useParams,

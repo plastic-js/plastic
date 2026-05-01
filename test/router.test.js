@@ -16,6 +16,7 @@ import {
 	h,
 	renderApp,
 	useLocation,
+	useMatch,
 	useNavigate,
 	useParams,
 	useRoute,
@@ -293,6 +294,36 @@ describe('router', ()=> {
 
 		expect(window.location.search).toBe('?tab=trending&page=2')
 		expect(container.textContent).toContain('trending')
+	})
+
+	it('useMatch tracks static prefix paths and dynamic segment paths', ()=> {
+		window.history.replaceState(null, '', '/settings/profile')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Status = ()=> {
+			const isSettings = useMatch('/settings')
+			const isUser = useMatch('/users/:id')
+			return h('p', null, `${isSettings()}|${isUser()}`)
+		}
+
+		const App = ()=> h(Router, null,
+			h(Route, {
+				path: '*',
+				component: Status,
+			}),
+		)
+
+		renderApp(container, h(App))
+		expect(container.textContent).toContain('true|false')
+
+		window.history.pushState(null, '', '/users/42')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(container.textContent).toContain('false|true')
+
+		window.history.pushState(null, '', '/users/42/edit')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(container.textContent).toContain('false|false')
 	})
 
 	it('blocks guarded routes and falls through to a catch-all route', ()=> {

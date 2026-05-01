@@ -53,6 +53,7 @@ Hash-based routing is intentionally not supported at the moment. To keep the rou
 - `<Route path="...">` renders only the active branch.
 - `<Link to="...">` renders a normal anchor and intercepts internal left-click navigation.
 - `<NavLink to="...">` extends `<Link>` and adds an `active` class plus `aria-current="page"` when the target matches the current route.
+- `useMatch(path)` returns a reactive matcher function for custom active-state UI without rendering `<NavLink>`.
 - `navigate(to, options)` performs programmatic navigation.
 - `<Outlet />` renders the currently matched child route inside a parent route component.
 - `lazy(importFn, options?)` wraps a dynamic import as a code-split component for use with `<Route>`.
@@ -78,6 +79,34 @@ const App = ()=> (
 ```
 
 By default, `NavLink` treats nested URLs as active matches, so a link to `/settings` stays active on `/settings/profile`. Pass `end` to require an exact pathname match instead. Use `activeClass` to override the default `active` class name.
+
+### Custom Match Hook
+
+Use `useMatch(path)` when you want route-aware active styles on non-anchor UI (tabs, cards, badges, etc.).
+
+```jsx
+import { Router, Route, useMatch } from 'jsx'
+
+const DashboardTabs = ()=> {
+	const isSettings = useMatch('/settings')
+	const isUser = useMatch('/users/:id')
+
+	return (
+		<div>
+			<p className={isSettings() ? 'on' : 'off'}>Settings</p>
+			<p className={isUser() ? 'on' : 'off'}>User</p>
+		</div>
+	)
+}
+
+const App = ()=> (
+	<Router>
+		<Route path='*' component={DashboardTabs} />
+	</Router>
+)
+```
+
+`useMatch('/settings')` follows `NavLink` default active behavior (prefix match), while parameterized paths like `/users/:id` use exact segment-shape matching.
 
 ### Nested Routes
 
