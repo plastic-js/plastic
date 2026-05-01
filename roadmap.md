@@ -80,14 +80,6 @@
 - [X] Extend Babel plugin to lazily wrap `<Case>`/`<Default>` children as factory props.
 - [X] Built on the same `mountDynamic` primitive as `<Either>`.
 
-### Extras
-- [X] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
-- [X] `<Dynamic component={tag}>` — select component or HTML tag dynamically at runtime.
-- [X] Implement `createAsync(source)` helper that accepts a Promise or Promise factory and exposes `isLoading`, `data`, `error`, and `run`.
-- [ ] Guarantee deterministic update order between parent effects and child effects.
-- [ ] Implement a simple state management system using the tree API.
-- [X] Implement Context API for passing data through the component tree without prop drilling.
-
 # Routing
 - [X] Implement a basic client-side router.
   - [X] Add a standalone `src/router.js` module so routing logic stays out of `jsx-runtime.js`.
@@ -101,10 +93,18 @@
 - [X] Support route guards — synchronous `guard` / `beforeEnter` hooks on `<Route>`; returning `false` blocks the route; returning a string or `{ pathname, search, hash }` object redirects with `replace: true`.
 - [X] Implement a Link component for navigation.
 - [X] Support lazy loading via `lazy(importFn, options?)` — dynamic import with signal-based re-render and optional fallback component.
-- [ ] Support dynamic route matching and route transitions.
+- [X] Support dynamic route matching and route transitions.
 
 ## Performance Optimization
 - [X] Avoid unnecessary DOM writes when a reactive prop resolves to the same value.
 - [ ] Batch multiple signal-triggered DOM updates in the same microtask.
 - [ ] Implement batching updates to ensure that multiple signal modifications within the same microtask only trigger.
 - [ ] Ensure that updates are applied in the correct order and that any necessary debouncing or batching strategies are implemented to optimize performance.
+
+# Extras
+- [X] `<Portal container={el}>` — render content outside the component tree (modals, tooltips).
+- [X] `<Dynamic component={tag}>` — select component or HTML tag dynamically at runtime.
+- [X] Implement `createAsync(source)` helper that accepts a Promise or Promise factory and exposes `isLoading`, `data`, `error`, and `run`.
+- [ ] Guarantee deterministic update order between parent effects and child effects.
+- [ ] Implement a simple state management system using the tree API.
+- [X] Implement Context API for passing data through the component tree without prop drilling.
