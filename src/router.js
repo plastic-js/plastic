@@ -661,7 +661,54 @@ const navigate = (to, options = {})=> {
 	sharedRouterState.navigate(to, options)
 }
 
+// lazy(importFn, options?) — code-split a route component via dynamic import.
+//
+// importFn  — a zero-argument function that returns a Promise<module>.
+//             The resolved module's `default` export is used as the component.
+// options.fallback — optional component function or DOM node to render while
+//                    the import is in flight.  Defaults to null (render nothing).
+//
+// Returns a regular component function that can be used as the `component`
+// prop of a <Route> or mounted directly.  The import is started the first time
+// the component is rendered; subsequent renders (and re-renders triggered by
+// other signals) reuse the already-cached result synchronously.
+//
+// Because the LazyComponent reads the `resolved` signal during its render, any
+// reactive context that called it (e.g. mountDynamic inside Match/Route) will
+// automatically re-execute once the import settles and display the real component.
+const lazy = (importFn, options = {})=> {
+	const resolved = createSignal(null)
+	let started = false
+
+	const ensureLoaded = ()=> {
+		if (started){
+			return
+		}
+		started = true
+		Promise.resolve(importFn()).then((mod)=> {
+			resolved(mod.default ?? mod)
+			return mod
+		}).catch(()=> {})
+	}
+
+	const LazyComponent = (props)=> {
+		ensureLoaded()
+		const Component = resolved()
+		if (!Component){
+			const { fallback } = options
+			if (typeof fallback === 'function'){
+				return h(fallback, {})
+			}
+			return fallback ?? null
+		}
+		return h(Component, props)
+	}
+
+	return LazyComponent
+}
+
 export {
+	lazy,
 	Link,
 	navigate,
 	Outlet,

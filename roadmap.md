@@ -100,6 +100,7 @@
 - [X] Support nested routes and `Outlet`-based child route rendering.
 - [X] Support route guards — synchronous `guard` / `beforeEnter` hooks on `<Route>`; returning `false` blocks the route; returning a string or `{ pathname, search, hash }` object redirects with `replace: true`.
 - [X] Implement a Link component for navigation.
+- [X] Support lazy loading via `lazy(importFn, options?)` — dynamic import with signal-based re-render and optional fallback component.
 - [ ] Support dynamic route matching and route transitions.
 
 ## Performance Optimization

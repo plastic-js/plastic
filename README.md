@@ -52,6 +52,7 @@ Plastic ships with a lightweight client-side router built on top of the browser 
 - `<Link to="...">` renders a normal anchor and intercepts internal left-click navigation.
 - `navigate(to, options)` performs programmatic navigation.
 - `<Outlet />` renders the currently matched child route inside a parent route component.
+- `lazy(importFn, options?)` wraps a dynamic import as a code-split component for use with `<Route>`.
 
 ### Nested Routes
 
@@ -102,3 +103,46 @@ navigate('/settings/profile')
 - Nested child paths are resolved relative to their parent route. For example, a child `path='/profile'` inside a parent `path='/settings'` matches `/settings/profile`.
 - `index` routes match the parent path itself and render through the parent component's `<Outlet />`.
 - Query strings are exposed through `useRoute().query` and route props (`query`) without affecting path matching.
+
+### Lazy Loading
+
+`lazy(importFn, options?)` code-splits a route component via a dynamic `import()`. The module is fetched the first time the route is rendered; subsequent renders reuse the cached result synchronously. Because the resolved component is stored in a signal, the route automatically re-renders once the import settles — no manual wiring required.
+
+```jsx
+import { lazy, Route, Router } from 'jsx'
+
+// Each call to lazy() creates an independent, deduplicated import.
+const LazyDashboard = lazy(() => import('./pages/Dashboard.jsx'))
+const LazySettings  = lazy(() => import('./pages/Settings.jsx'))
+
+const App = ()=> (
+	<Router>
+		<Route component={LazyDashboard} path='/dashboard' />
+		<Route component={LazySettings}  path='/settings' />
+	</Router>
+)
+```
+
+**With a loading fallback**
+
+Pass a `fallback` option to render a placeholder component while the import is in flight:
+
+```jsx
+const Spinner = ()=> <p>Loading…</p>
+
+const LazyDashboard = lazy(
+	()=> import('./pages/Dashboard.jsx'),
+	{ fallback: Spinner },
+)
+```
+
+`fallback` can be a component function (called with no props) or a pre-created DOM node / `null`. When omitted, the route renders nothing during loading.
+
+**API**
+
+| Argument | Type | Description |
+|---|---|---|
+| `importFn` | `() => Promise<module>` | Zero-argument factory. The module's `default` export is used as the component. |
+| `options.fallback` | `Component \| Node \| null` | Shown while the import is in flight. Defaults to `null`. |
+
+> The returned `LazyComponent` function is a plain component and can also be used outside of routes — anywhere `h(LazyComponent, props)` is valid.

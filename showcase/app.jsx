@@ -10,18 +10,22 @@ import {
 	createComputed,
 	createSignal,
 	createTree,
+	lazy,
 	navigate,
 	onCleanup,
 	onMount,
 	renderApp,
 } from '../src/index.js'
 import './global.css'
-import PageOne from './pages/PageOne.jsx'
-import PageTwo from './pages/PageTwo.jsx'
-import PageOneA from './pages/PageOneA.jsx'
-import PageOneB from './pages/PageOneB.jsx'
-import PageTwoA from './pages/PageTwoA.jsx'
-import PageTwoB from './pages/PageTwoB.jsx'
+
+const Loading = ()=> <div className='checklist' style={{ padding: '12px' }}>Loading…</div>
+
+const PageOne = lazy(()=> import('./pages/PageOne.jsx'), { fallback: Loading })
+const PageTwo = lazy(()=> import('./pages/PageTwo.jsx'), { fallback: Loading })
+const PageOneA = lazy(()=> import('./pages/PageOneA.jsx'), { fallback: Loading })
+const PageOneB = lazy(()=> import('./pages/PageOneB.jsx'), { fallback: Loading })
+const PageTwoA = lazy(()=> import('./pages/PageTwoA.jsx'), { fallback: Loading })
+const PageTwoB = lazy(()=> import('./pages/PageTwoB.jsx'), { fallback: Loading })
 
 const PageTwoNotFound = ()=> (
 	<div className='checklist' style={{ marginTop: '10px' }}>

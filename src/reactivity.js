@@ -325,7 +325,7 @@ const tree = (obj)=> {
 }
 
 const createSignal = (value)=> {
-	if (isSignal(value)){
+	if (typeof value === 'function' && isSignal(value)){
 		return value
 	}
 
