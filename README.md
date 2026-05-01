@@ -16,7 +16,7 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - **Fragment support** — return multiple root nodes without a wrapper element.
 - **`<Either>` conditional rendering** — lazily renders only the active branch (`<True>`/`<False>`) via a comment-node anchor; inactive branches are never evaluated until the condition flips.
 - **`<Loop>` list rendering** — reconciles lists by object identity; reuses, moves, and disposes item rows with fine-grained owner tracking.
-- **Client-side routing** — `<Router>`, `<Route>`, `<Link>`, `navigate()`, `<Outlet>`, and `useRoute()` use the History API for nested routing with params and query awareness.
+- **Client-side routing** — `<Router>`, `<Route>`, `<Link>`, `<NavLink>`, `navigate()`, `<Outlet>`, and `useRoute()` use the History API for nested routing with params and query awareness.
 
 ## Lifecycle Semantics
 
@@ -52,9 +52,32 @@ Hash-based routing is intentionally not supported at the moment. To keep the rou
 - `<Router>` owns the current location signal and listens to browser navigation.
 - `<Route path="...">` renders only the active branch.
 - `<Link to="...">` renders a normal anchor and intercepts internal left-click navigation.
+- `<NavLink to="...">` extends `<Link>` and adds an `active` class plus `aria-current="page"` when the target matches the current route.
 - `navigate(to, options)` performs programmatic navigation.
 - `<Outlet />` renders the currently matched child route inside a parent route component.
 - `lazy(importFn, options?)` wraps a dynamic import as a code-split component for use with `<Route>`.
+
+### Active Navigation Links
+
+Use `<NavLink>` when a navigation item should reflect the current route automatically.
+
+```jsx
+import { NavLink, Route, Router } from 'jsx'
+
+const App = ()=> (
+	<Router>
+		<nav>
+			<NavLink to='/'>Home</NavLink>
+			<NavLink to='/settings' className='nav-item'>Settings</NavLink>
+		</nav>
+
+		<Route path='/' component={HomePage} />
+		<Route path='/settings' component={SettingsPage} />
+	</Router>
+)
+```
+
+By default, `NavLink` treats nested URLs as active matches, so a link to `/settings` stays active on `/settings/profile`. Pass `end` to require an exact pathname match instead. Use `activeClass` to override the default `active` class name.
 
 ### Nested Routes
 

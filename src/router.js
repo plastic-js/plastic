@@ -622,6 +622,26 @@ const useSearchParams = ()=> {
 
 const isPlainLeftClick = event=> event.button === 0 && !event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey
 
+const resolveLinkTarget = to=> normalizeTarget(typeof to === 'function' ? to() : to)
+
+const isPathPrefixMatch = (pathname, targetPath)=> pathname === targetPath || pathname.startsWith(`${targetPath}/`)
+
+const isNavLinkActive = ({
+	currentPath,
+	targetPath,
+	end,
+})=> {
+	if (targetPath === '/'){
+		return currentPath === '/'
+	}
+
+	if (end){
+		return currentPath === targetPath
+	}
+
+	return isPathPrefixMatch(currentPath, targetPath)
+}
+
 const Link = ({
 	to = '/',
 	replace = false,
@@ -630,7 +650,7 @@ const Link = ({
 	children,
 	...props
 })=> {
-	const resolveTarget = ()=> normalizeTarget(typeof to === 'function' ? to() : to)
+	const resolveTarget = ()=> resolveLinkTarget(to)
 	const href = ()=> {
 		sharedRouterVersion()
 		return sharedRouterState.createHref(resolveTarget())
@@ -654,6 +674,45 @@ const Link = ({
 		href,
 		onClick: handleClick,
 		...target ? { target } : {},
+	}, children)
+}
+
+const NavLink = ({
+	to = '/',
+	replace = false,
+	onClick,
+	target,
+	children,
+	className,
+	activeClass = 'active',
+	ariaCurrent = 'page',
+	end = false,
+	...props
+})=> {
+	const location = useLocation()
+	const resolveTarget = ()=> resolveLinkTarget(to)
+	const targetPath = ()=> stripQueryAndHash(resolveTarget())
+	const isActive = ()=> isNavLinkActive({
+		currentPath: location().pathname,
+		targetPath: targetPath(),
+		end,
+	})
+	const resolvedClassName = ()=> {
+		const baseClassName = typeof className === 'function' ? className() : className
+		const tokens = [baseClassName, isActive() ? activeClass : '']
+			.filter(value=> typeof value === 'string' && value.trim())
+			.map(value=> value.trim())
+		return tokens.join(' ')
+	}
+
+	return h(Link, {
+		...props,
+		to,
+		replace,
+		onClick,
+		...target ? { target } : {},
+		className: resolvedClassName,
+		'aria-current': ()=> isActive() ? ariaCurrent : null,
 	}, children)
 }
 
@@ -710,6 +769,7 @@ const lazy = (importFn, options = {})=> {
 export {
 	lazy,
 	Link,
+	NavLink,
 	navigate,
 	Outlet,
 	Route,

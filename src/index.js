@@ -24,6 +24,7 @@ import {
 } from './jsx-runtime.js'
 import {
 	Link,
+	NavLink,
 	Outlet,
 	Route,
 	Router,
@@ -44,6 +45,7 @@ export {
 	createTree,
 	lazy,
 	Link,
+	NavLink,
 	navigate,
 	Loop,
 	Outlet,

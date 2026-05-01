@@ -9,6 +9,7 @@ import {
 } from 'vitest'
 import {
 	Link,
+	NavLink,
 	Outlet,
 	Route,
 	Router,
@@ -67,6 +68,30 @@ describe('router', ()=> {
 
 		expect(window.location.pathname).toBe('/about')
 		expect(container.textContent).toContain('About page')
+	})
+
+	it('NavLink applies an active class for the current route', ()=> {
+		window.history.replaceState(null, '', '/about')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const App = ()=> h(Router, null, h('nav', null, h(NavLink, { to: '/' }, 'Home'), h(NavLink, { to: '/about', className: 'nav-item' }, 'About')), h(Route, { path: '/' }, h('p', null, 'Home page')), h(Route, { path: '/about' }, h('p', null, 'About page')))
+
+		renderApp(container, h(App))
+		const links = container.querySelectorAll('a')
+
+		expect(links[0].className).toBe('')
+		expect(links[0].getAttribute('aria-current')).toBeNull()
+		expect(links[1].className).toBe('nav-item active')
+		expect(links[1].getAttribute('aria-current')).toBe('page')
+
+		window.history.pushState(null, '', '/')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+
+		expect(links[0].className).toBe('active')
+		expect(links[0].getAttribute('aria-current')).toBe('page')
+		expect(links[1].className).toBe('nav-item')
+		expect(links[1].getAttribute('aria-current')).toBeNull()
 	})
 
 	it('renders the matching route and reacts to popstate', ()=> {
@@ -274,15 +299,12 @@ describe('router', ()=> {
 		const container = document.createElement('div')
 		document.body.appendChild(container)
 
-		const App = ()=> h(Router, null,
-			h(Route, {
-				path: '/admin',
-				guard: ()=> false,
-			}, h('p', null, 'Admin')),
-			h(Route, {
-				path: '*',
-			}, h('p', null, 'Not found')),
-		)
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/admin',
+			guard: ()=> false,
+		}, h('p', null, 'Admin')), h(Route, {
+			path: '*',
+		}, h('p', null, 'Not found')))
 
 		renderApp(container, h(App))
 		expect(window.location.pathname).toBe('/admin')
@@ -294,18 +316,15 @@ describe('router', ()=> {
 		const container = document.createElement('div')
 		document.body.appendChild(container)
 
-		const App = ()=> h(Router, null,
-			h(Route, {
-				path: '/admin',
-				beforeEnter: ({ pathname })=> ({
-					pathname: '/login',
-					search: { redirect: pathname },
-				}),
-			}, h('p', null, 'Admin')),
-			h(Route, {
-				path: '/login',
-			}, h('p', null, 'Login')),
-		)
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/admin',
+			beforeEnter: ({ pathname })=> ({
+				pathname: '/login',
+				search: { redirect: pathname },
+			}),
+		}, h('p', null, 'Admin')), h(Route, {
+			path: '/login',
+		}, h('p', null, 'Login')))
 
 		renderApp(container, h(App))
 		expect(window.location.pathname).toBe('/login')
