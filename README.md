@@ -45,6 +45,8 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 
 Plastic ships with a lightweight client-side router built on top of the browser History API.
 
+Hash-based routing is intentionally not supported at the moment. To keep the router implementation small and predictable, Plastic currently supports only the History API.
+
 ### Available Router APIs
 
 - `<Router>` owns the current location signal and listens to browser navigation.
