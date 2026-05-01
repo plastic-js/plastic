@@ -20,6 +20,7 @@ import {
 	useParams,
 	useRoute,
 	useSearchParams,
+	useNavigationState,
 } from '../src/index.js'
 
 describe('router', ()=> {
@@ -330,6 +331,64 @@ describe('router', ()=> {
 		expect(window.location.pathname).toBe('/login')
 		expect(window.location.search).toBe('?redirect=%2Fadmin')
 		expect(container.textContent).toBe('Login')
+	})
+
+	it('navigate passes state to history and useNavigationState reads it', ()=> {
+		window.history.replaceState(null, '', '/')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const About = ()=> {
+			const state = useNavigationState()
+			return h('p', null, state()?.from ?? 'none')
+		}
+
+		const Home = ()=> {
+			const nav = useNavigate()
+			return h('button', { onClick: ()=> nav('/about', { state: { from: 'home' } }) }, 'Go')
+		}
+
+		const App = ()=> h(Router, null,
+			h(Route, { path: '/', component: Home }),
+			h(Route, { path: '/about', component: About }),
+		)
+
+		renderApp(container, h(App))
+		container.querySelector('button').dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, cancelable: true }))
+
+		expect(window.history.state).toEqual({ from: 'home' })
+		expect(container.textContent).toBe('home')
+	})
+
+	it('navigate replace preserves provided state and clears on new navigation', ()=> {
+		window.history.replaceState(null, '', '/')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Page = ()=> {
+			const state = useNavigationState()
+			return h('p', null, String(state()?.step ?? 'none'))
+		}
+
+		const App = ()=> h(Router, null,
+			h(Route, { path: '/', component: Page }),
+			h(Route, { path: '/step2', component: Page }),
+		)
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('none')
+
+		// push with state
+		window.history.pushState({ step: 1 }, '', '/step2')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(window.history.state).toEqual({ step: 1 })
+		expect(container.textContent).toBe('1')
+
+		// replace with different state
+		window.history.replaceState({ step: 99 }, '', '/step2')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(window.history.state).toEqual({ step: 99 })
+		expect(container.textContent).toBe('99')
 	})
 
 	describe('nested routes', ()=> {

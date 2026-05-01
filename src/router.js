@@ -415,7 +415,8 @@ const createNavigationApi = (setCurrentLocation, root = '/')=> {
 			const target = withRoot(nextLocation)
 			const replace = Boolean(options.replace)
 			const method = replace ? 'replaceState' : 'pushState'
-			window.history[method](window.history.state, '', target)
+			const state = options.state !== undefined ? options.state : window.history.state
+			window.history[method](state, '', target)
 			setCurrentLocation(nextLocation)
 		},
 	}
@@ -608,6 +609,19 @@ const useParams = ()=> {
 	return route ? route.params : {}
 }
 
+const useNavigationState = ()=> {
+	if (typeof window === 'undefined'){
+		return ()=> null
+	}
+	const location = useLocation()
+	// Reading location() as a dependency ensures the state is re-read after
+	// every navigation (pushState / replaceState both update the location signal).
+	return ()=> {
+		location()
+		return window.history.state
+	}
+}
+
 const useSearchParams = ()=> {
 	const location = useLocation()
 	const setSearchParams = (next, options = {})=> {
@@ -776,6 +790,7 @@ export {
 	Router,
 	useLocation,
 	useNavigate,
+	useNavigationState,
 	useParams,
 	useRoute,
 	useSearchParams,
