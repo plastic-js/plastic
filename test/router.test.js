@@ -14,6 +14,11 @@ import {
 	Router,
 	h,
 	renderApp,
+	useLocation,
+	useNavigate,
+	useParams,
+	useRoute,
+	useSearchParams,
 } from '../src/index.js'
 
 describe('router', ()=> {
@@ -111,6 +116,157 @@ describe('router', ()=> {
 		window.dispatchEvent(new PopStateEvent('popstate'))
 		expect(Inactive).toHaveBeenCalledTimes(1)
 		expect(container.textContent).toBe('Inactive')
+	})
+
+	it('passes dynamic path params to route components', ()=> {
+		window.history.replaceState(null, '', '/users/42')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const User = ({ params })=> h('p', null, `User ${params.id}`)
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/users/:id',
+			component: User,
+		}))
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('User 42')
+
+		window.history.pushState(null, '', '/users/7')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(container.textContent).toBe('User 7')
+	})
+
+	it('exposes query information through useRoute', ()=> {
+		window.history.replaceState(null, '', '/search?tab=people&sort=asc')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Search = ()=> {
+			const route = useRoute()
+			return h('p', null, `${route.pathname}|${route.search}|${route.query.tab}|${route.query.sort}`)
+		}
+
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/search',
+			component: Search,
+		}))
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('/search|?tab=people&sort=asc|people|asc')
+	})
+
+	it('keeps query and hash in Link href and navigate updates route query', ()=> {
+		window.history.replaceState(null, '', '/')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Search = ()=> {
+			const route = useRoute()
+			return h('p', null, route.query.tab || 'none')
+		}
+
+		const App = ()=> h(Router, null, h(Link, { to: '/search?tab=popular#top' }, 'Popular'), h(Route, { path: '/search', component: Search }))
+
+		renderApp(container, h(App))
+		const link = container.querySelector('a')
+		expect(link.getAttribute('href')).toBe('/search?tab=popular#top')
+
+		link.dispatchEvent(new MouseEvent('click', {
+			bubbles: true,
+			button: 0,
+			cancelable: true,
+		}))
+
+		expect(window.location.pathname).toBe('/search')
+		expect(window.location.search).toBe('?tab=popular')
+		expect(window.location.hash).toBe('#top')
+		expect(container.textContent).toContain('popular')
+	})
+
+	it('useNavigate performs programmatic navigation', ()=> {
+		window.history.replaceState(null, '', '/')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Home = ()=> {
+			const nav = useNavigate()
+			return h('button', {
+				onClick: ()=> nav('/about?from=home'),
+			}, 'Go')
+		}
+
+		const About = ()=> {
+			const location = useLocation()
+			return h('p', null, `${location().pathname}${location().search}`)
+		}
+
+		const App = ()=> h(Router, null, h(Route, { path: '/', component: Home }), h(Route, { path: '/about', component: About }))
+
+		renderApp(container, h(App))
+		const button = container.querySelector('button')
+		button.dispatchEvent(new MouseEvent('click', {
+			bubbles: true,
+			button: 0,
+			cancelable: true,
+		}))
+
+		expect(window.location.pathname).toBe('/about')
+		expect(window.location.search).toBe('?from=home')
+		expect(container.textContent).toContain('/about?from=home')
+	})
+
+	it('useParams returns current dynamic params', ()=> {
+		window.history.replaceState(null, '', '/posts/99')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Post = ()=> {
+			const params = useParams()
+			return h('p', null, params.id)
+		}
+
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/posts/:id',
+			component: Post,
+		}))
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('99')
+	})
+
+	it('useSearchParams exposes query accessor and setter', ()=> {
+		window.history.replaceState(null, '', '/search?tab=latest')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const Search = ()=> {
+			const [searchParams, setSearchParams] = useSearchParams()
+			return h('div', null, h('p', null, searchParams().tab || 'none'), h('button', {
+				onClick: ()=> setSearchParams({
+					tab: 'trending',
+					page: 2,
+				}),
+			}, 'Update'))
+		}
+
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/search',
+			component: Search,
+		}))
+
+		renderApp(container, h(App))
+		expect(container.textContent).toContain('latest')
+
+		const button = container.querySelector('button')
+		button.dispatchEvent(new MouseEvent('click', {
+			bubbles: true,
+			button: 0,
+			cancelable: true,
+		}))
+
+		expect(window.location.search).toBe('?tab=trending&page=2')
+		expect(container.textContent).toContain('trending')
 	})
 
 	describe('nested routes', ()=> {
@@ -232,6 +388,23 @@ describe('router', ()=> {
 			// Profile branch disposed; not called again
 			expect(Profile).toHaveBeenCalledTimes(1)
 			expect(container.textContent).toBe('Security')
+		})
+
+		it('supports params in nested routes and reads them in child Outlet branch', ()=> {
+			window.history.replaceState(null, '', '/teams/acme/members/7')
+			const container = document.createElement('div')
+			document.body.appendChild(container)
+
+			const TeamShell = ()=> h('section', null, h('h2', null, 'Team'), h(Outlet, null))
+			const Member = ()=> {
+				const route = useRoute()
+				return h('p', null, `${route.params.teamId}:${route.params.memberId}`)
+			}
+
+			const App = ()=> h(Router, null, h(Route, { path: '/teams/:teamId', component: TeamShell }, h(Route, { path: '/members/:memberId', component: Member })))
+
+			renderApp(container, h(App))
+			expect(container.textContent).toContain('acme:7')
 		})
 	})
 })

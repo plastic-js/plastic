@@ -18,7 +18,80 @@ const normalizeTarget = (value)=> {
 	return target
 }
 
-const stripQueryAndHash = target=> target.split(/[?#]/, 1)[0] || '/'
+const createUrl = value=> new URL(normalizeTarget(value), 'https://plastic.local')
+
+const stripQueryAndHash = target=> createUrl(target).pathname || '/'
+
+const splitSegments = (path)=> {
+	const normalized = normalizePath(path)
+	if (normalized === '/'){
+		return []
+	}
+	return normalized.slice(1).split('/')
+}
+
+const parseQuery = (search)=> {
+	const query = {}
+	const params = new URLSearchParams(search || '')
+	for (const [key, value] of params.entries()){
+		if (Object.prototype.hasOwnProperty.call(query, key)){
+			const current = query[key]
+			query[key] = Array.isArray(current) ? [...current, value] : [current, value]
+			continue
+		}
+		query[key] = value
+	}
+	return query
+}
+
+const toSearchString = (input)=> {
+	if (typeof input === 'string'){
+		if (!input){
+			return ''
+		}
+		return input.startsWith('?') ? input : `?${input}`
+	}
+
+	const params = new URLSearchParams()
+	if (input instanceof URLSearchParams){
+		return input.toString() ? `?${input.toString()}` : ''
+	}
+
+	if (!input || typeof input !== 'object'){
+		return ''
+	}
+
+	Object.entries(input).forEach(([key, value])=> {
+		if (value == null){
+			return
+		}
+		if (Array.isArray(value)){
+			value.forEach((entry)=> {
+				if (entry != null){
+					params.append(key, String(entry))
+				}
+			})
+			return
+		}
+		params.set(key, String(value))
+	})
+
+	const text = params.toString()
+	return text ? `?${text}` : ''
+}
+
+const createLocation = (value)=> {
+	const url = createUrl(value)
+	const pathname = normalizePath(url.pathname || '/')
+	const search = url.search || ''
+	const hash = url.hash || ''
+	return {
+		pathname,
+		search,
+		hash,
+		query: parseQuery(search),
+	}
+}
 
 const normalizePath = (value)=> {
 	let path = stripQueryAndHash(normalizeTarget(value))
@@ -30,10 +103,14 @@ const normalizePath = (value)=> {
 }
 
 // Contexts ─────────────────────────────────────────────────────────────────
-// RouterContext: { currentPath: Signal<string>, basePath: string }
+// RouterContext: { currentPath: ()=> string, currentLocation: Signal<Location>, basePath: string }
 // Provided by Router; updated by each parent Route so nested branches can
 // read the accumulated base path.
 const RouterContext = createContext(null)
+
+// RouteMatchContext: RouteMatch
+// Provided by buildRouteMatch so route components can read params/search/query.
+const RouteMatchContext = createContext(null)
 
 // NestedRoutesContext: RouteDescriptor[]
 // Provided by a parent Route so that <Outlet> inside the component knows
@@ -58,58 +135,160 @@ const joinPaths = (base, segment)=> {
 	return normalizePath(cleanBase + cleanSegment)
 }
 
+const createRouteMatcher = (routePath)=> {
+	const routeSegments = splitSegments(routePath)
+	const matchSegments = (pathname, isPrefix)=> {
+		const pathSegments = splitSegments(pathname)
+		if (!isPrefix && routeSegments.length !== pathSegments.length){
+			return null
+		}
+		if (isPrefix && routeSegments.length > pathSegments.length){
+			return null
+		}
+
+		const params = {}
+		for (const [index, segment] of routeSegments.entries()){
+			const current = pathSegments[index]
+			if (current === undefined){
+				return null
+			}
+
+			if (segment.startsWith(':') && segment.length > 1){
+				params[segment.slice(1)] = current
+				continue
+			}
+
+			if (segment !== current){
+				return null
+			}
+		}
+
+		return params
+	}
+
+	return {
+		matchExact: pathname=> matchSegments(pathname, false),
+		matchPrefix: pathname=> matchSegments(pathname, true),
+	}
+}
+
+const createRouteMatchInfo = ({
+	routePath, pathname, params, location,
+})=> ({
+	path: routePath,
+	pathname,
+	params,
+	search: location.search,
+	hash: location.hash,
+	query: location.query,
+})
+
 // Build a reactive Match element from a flat list of RouteDescriptors.
 // Parent routes (those with nested route children) use prefix matching;
 // leaf routes use exact equality matching.
 // basePath is the already-accumulated prefix at this router level (root-
 // relative, so always starts with '/').
-const buildRouteMatch = (routes, currentPath, basePath)=> {
+const buildRouteMatch = (routes, currentLocation, basePath)=> {
 	const nonDefault = routes.filter(r=> !r.isDefault)
 	const defaultRoute = routes.find(r=> r.isDefault)
 
 	// Compute the index of the currently active route reactively.
 	// Returning -1 means "no match" → Match falls through to defaultBranch.
-	const activeIndex = ()=> {
-		const path = currentPath()
+	const readCandidateMatch = ()=> {
+		const location = currentLocation()
+		const pathname = location.pathname
+
 		for (const [i, r] of nonDefault.entries()){
 			const fullPath = joinPaths(basePath, r.when)
 			const isParent = r.nestedRoutes && r.nestedRoutes.length > 0
-			const matched = isParent ? path === fullPath || path.startsWith(`${fullPath}/`) : path === fullPath
-			if (matched){
-				return i
+			const matcher = createRouteMatcher(fullPath)
+			const params = isParent ? matcher.matchPrefix(pathname) : matcher.matchExact(pathname)
+			if (params){
+				return {
+					index: i,
+					match: createRouteMatchInfo({
+						routePath: fullPath,
+						pathname,
+						params,
+						location,
+					}),
+				}
 			}
 		}
-		return -1
+
+		return {
+			index: -1,
+			match: defaultRoute? createRouteMatchInfo({
+					routePath: '*',
+					pathname,
+					params: {},
+					location,
+				}): null,
+		}
 	}
 
-	const cases = nonDefault.map((r, i)=> ({ when: i, branch: r.branch }))
+	const activeIndex = ()=> {
+		const candidate = readCandidateMatch()
+		return candidate.index
+	}
+
+	const cases = nonDefault.map((r, i)=> ({
+		when: i,
+		branch: ()=> {
+			const candidate = readCandidateMatch()
+			if (candidate.index !== i || !candidate.match){
+				return null
+			}
+			return h(RouteMatchContext.Provider, {
+				value: candidate.match,
+				children: ()=> r.branch(candidate.match),
+			})
+		},
+	}))
+
+	const defaultBranch = defaultRoute
+? ()=> {
+		const candidate = readCandidateMatch()
+		if (!candidate.match){
+			return defaultRoute.branch(null)
+		}
+		return h(RouteMatchContext.Provider, {
+			value: candidate.match,
+			children: ()=> defaultRoute.branch(candidate.match),
+		})
+	}
+: undefined
 
 	return h(Match, {
 		value: activeIndex,
 		cases,
-		...defaultRoute ? { defaultBranch: defaultRoute.branch } : {},
+		...defaultBranch ? { defaultBranch } : {},
 	})
 }
 
-const readCurrentPath = (root = '/')=> {
+const readCurrentLocation = (root = '/')=> {
 	if (typeof window === 'undefined'){
-		return '/'
+		return createLocation('/')
 	}
-	const fullPath = normalizePath(window.location.pathname || '/')
+	const fullLocation = createLocation(`${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`)
+	const fullPath = fullLocation.pathname
 	const normalizedRoot = normalizePath(root)
 	if (normalizedRoot === '/'){
-		return fullPath
+		return fullLocation
 	}
 	if (fullPath.startsWith(normalizedRoot)){
 		const relative = fullPath.slice(normalizedRoot.length) || '/'
-		return relative.startsWith('/') ? relative : `/${relative}`
+		return {
+			...fullLocation,
+			pathname: relative.startsWith('/') ? relative : `/${relative}`,
+		}
 	}
-	return fullPath
+	return fullLocation
 }
 
 const sharedRouterVersion = createSignal(0)
 const sharedRouterState = {
-	currentPath: createSignal(readCurrentPath()),
+	currentLocation: createSignal(readCurrentLocation()),
 	navigate: ()=> {},
 	createHref: to=> normalizeTarget(to),
 }
@@ -118,37 +297,38 @@ const touchSharedRouter = ()=> {
 	sharedRouterVersion(sharedRouterVersion() + 1)
 }
 
-const createNavigationApi = (setCurrentPath, root = '/')=> {
+const createNavigationApi = (setCurrentLocation, root = '/')=> {
 	const normalizedRoot = normalizePath(root)
-	const withRoot = (path)=> {
-		if (normalizedRoot === '/'){ return path }
-		return normalizedRoot + (path === '/' ? '' : path)
+	const withRoot = (location)=> {
+		const rootedPathname = normalizedRoot === '/' ? location.pathname : normalizedRoot + (location.pathname === '/' ? '' : location.pathname)
+		return `${rootedPathname}${location.search}${location.hash}`
 	}
 
 	if (typeof window === 'undefined'){
 		return {
-			createHref: to=> withRoot(normalizeTarget(to)),
+			createHref: to=> withRoot(createLocation(to)),
 			navigate: ()=> {},
 		}
 	}
 
 	return {
-		createHref: to=> withRoot(normalizeTarget(to)),
+		createHref: to=> withRoot(createLocation(to)),
 		navigate: (to, options = {})=> {
-			const target = withRoot(normalizeTarget(to))
-			const nextPath = normalizePath(normalizeTarget(to))
+			const nextLocation = createLocation(to)
+			const target = withRoot(nextLocation)
 			const replace = Boolean(options.replace)
 			const method = replace ? 'replaceState' : 'pushState'
 			window.history[method](window.history.state, '', target)
-			setCurrentPath(nextPath)
+			setCurrentLocation(nextLocation)
 		},
 	}
 }
 
 const Router = ({ children, root = '/' })=> {
-	const currentPath = createSignal(readCurrentPath(root))
+	const currentLocation = createSignal(readCurrentLocation(root))
+	const currentPath = ()=> currentLocation().pathname
 	const syncPath = ()=> {
-		currentPath(readCurrentPath(root))
+		currentLocation(readCurrentLocation(root))
 	}
 	if (typeof window !== 'undefined'){
 		window.addEventListener('popstate', syncPath)
@@ -157,8 +337,8 @@ const Router = ({ children, root = '/' })=> {
 		})
 	}
 
-	const navigation = createNavigationApi(currentPath, root)
-	sharedRouterState.currentPath = currentPath
+	const navigation = createNavigationApi(currentLocation, root)
+	sharedRouterState.currentLocation = currentLocation
 	sharedRouterState.navigate = navigation.navigate
 	sharedRouterState.createHref = navigation.createHref
 	touchSharedRouter()
@@ -166,7 +346,9 @@ const Router = ({ children, root = '/' })=> {
 	// All path matching happens in root-relative space (readCurrentPath strips
 	// the root prefix), so the base for the top-level match is always '/'.
 	const basePath = '/'
-	const routerCtx = { currentPath, basePath }
+	const routerCtx = {
+		currentLocation, currentPath, basePath,
+	}
 
 	const childArray = Array.isArray(children) ? children : [children]
 	const routeMarkers = childArray.filter(child=> child instanceof Comment && child._routeDescriptor)
@@ -181,7 +363,7 @@ const Router = ({ children, root = '/' })=> {
 	return h(RouterContext.Provider, {
 		value: routerCtx,
 		children: ()=> {
-			const matchElement = buildRouteMatch(routes, currentPath, basePath)
+			const matchElement = buildRouteMatch(routes, currentLocation, basePath)
 			if (otherChildren.length === 0){
 				return matchElement
 			}
@@ -221,7 +403,14 @@ const Route = ({
 	const hasNestedRoutes = nestedRoutes.length > 0
 	const hasContentChildren = contentChildren.length > 0
 
-	const renderMatch = ()=> {
+	const renderMatch = (routeMatch = null)=> {
+		const routeProps = {
+			...componentProps,
+			params: routeMatch ? routeMatch.params : {},
+			query: routeMatch ? routeMatch.query : {},
+			route: routeMatch,
+		}
+
 		if (hasNestedRoutes){
 			// Read the current routing context to obtain the accumulated base path
 			// and the currentPath signal.  This call is safe because renderMatch is
@@ -230,9 +419,13 @@ const Route = ({
 			// Route).
 			const ctx = useContext(RouterContext)
 			const ctxBasePath = ctx ? ctx.basePath : '/'
-			const ctxCurrentPath = ctx ? ctx.currentPath : sharedRouterState.currentPath
+			const ctxCurrentLocation = ctx ? ctx.currentLocation : sharedRouterState.currentLocation
 			const newBasePath = joinPaths(ctxBasePath, expectedPath)
-			const newCtx = { currentPath: ctxCurrentPath, basePath: newBasePath }
+			const newCtx = {
+				currentLocation: ctxCurrentLocation,
+				currentPath: ()=> ctxCurrentLocation().pathname,
+				basePath: newBasePath,
+			}
 
 			if (typeof component === 'function'){
 				// Render the component wrapped in updated Router + NestedRoutes
@@ -244,7 +437,7 @@ const Route = ({
 					value: newCtx,
 					children: ()=> h(NestedRoutesContext.Provider, {
 						value: nestedRoutes,
-						children: ()=> h(component, componentProps),
+						children: ()=> h(component, routeProps),
 					}),
 				})
 			}
@@ -254,7 +447,7 @@ const Route = ({
 			return h(RouterContext.Provider, {
 				value: newCtx,
 				children: ()=> {
-					const nestedMatch = buildRouteMatch(nestedRoutes, ctxCurrentPath, newBasePath)
+					const nestedMatch = buildRouteMatch(nestedRoutes, ctxCurrentLocation, newBasePath)
 					if (!hasContentChildren){
 						return nestedMatch
 					}
@@ -268,13 +461,13 @@ const Route = ({
 
 		// Leaf route: backward-compatible behaviour.
 		if (isFunctionChildren){
-			return children(componentProps)
+			return children(routeProps)
 		}
 		if (hasContentChildren){
 			return contentChildren.length === 1 ? contentChildren[0] : contentChildren
 		}
 		if (typeof component === 'function'){
-			return h(component, componentProps)
+			return h(component, routeProps)
 		}
 		return []
 	}
@@ -297,7 +490,35 @@ const Outlet = ()=> {
 		return null
 	}
 
-	return buildRouteMatch(nestedRoutes, ctx.currentPath, ctx.basePath)
+	return buildRouteMatch(nestedRoutes, ctx.currentLocation, ctx.basePath)
+}
+
+const useRoute = ()=> useContext(RouteMatchContext)
+
+const useLocation = ()=> {
+	const ctx = useContext(RouterContext)
+	return ctx ? ctx.currentLocation : sharedRouterState.currentLocation
+}
+
+const useNavigate = ()=> (to, options = {})=> {
+	sharedRouterState.navigate(to, options)
+}
+
+const useParams = ()=> {
+	const route = useRoute()
+	return route ? route.params : {}
+}
+
+const useSearchParams = ()=> {
+	const location = useLocation()
+	const setSearchParams = (next, options = {})=> {
+		const current = location()
+		const nextValue = typeof next === 'function' ? next(current.query) : next
+		const nextSearch = toSearchString(nextValue)
+		const target = `${current.pathname}${nextSearch}${current.hash}`
+		sharedRouterState.navigate(target, options)
+	}
+	return [()=> location().query, setSearchParams]
 }
 
 const isPlainLeftClick = event=> event.button === 0 && !event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey
@@ -347,4 +568,9 @@ export {
 	Outlet,
 	Route,
 	Router,
+	useLocation,
+	useNavigate,
+	useParams,
+	useRoute,
+	useSearchParams,
 }

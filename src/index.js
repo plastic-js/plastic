@@ -28,6 +28,11 @@ import {
 	Route,
 	Router,
 	navigate,
+	useLocation,
+	useNavigate,
+	useParams,
+	useRoute,
+	useSearchParams,
 } from './router.js'
 
 export {
@@ -47,6 +52,11 @@ export {
 	Route,
 	Router,
 	True,
+	useLocation,
+	useNavigate,
+	useParams,
+	useRoute,
+	useSearchParams,
 	h,
 	jsx,
 	jsxs,

@@ -96,7 +96,7 @@
   - [X] Implement `<Route path="...">` with exact static-path matching and lazy rendering for the active branch only.
   - [X] Implement `<Link to="...">` that renders a normal anchor `href` and intercepts internal left-click navigation.
   - [X] Export router APIs from the public entry and cover initial render, route changes, link clicks, and back/forward navigation in tests.
-- [ ] Support route parameters and query strings.
+- [X] Support route parameters and query strings.
 - [X] Support nested routes and `Outlet`-based child route rendering.
 - [ ] Support route guards.
 - [X] Implement a Link component for navigation.
