@@ -183,6 +183,73 @@ const createRouteMatchInfo = ({
 	query: location.query,
 })
 
+const normalizeGuardRedirect = (result)=> {
+	if (typeof result === 'string' || result instanceof URLSearchParams){
+		return String(result)
+	}
+
+	if (!result || typeof result !== 'object' || Array.isArray(result)){
+		return null
+	}
+
+	if (typeof result.to === 'string' || result.to instanceof URLSearchParams){
+		return String(result.to)
+	}
+
+	if (typeof result.pathname !== 'string'){
+		return null
+	}
+
+	const search = result.search ? toSearchString(result.search) : ''
+	const hash = result.hash ? String(result.hash).startsWith('#') ? String(result.hash) : `#${String(result.hash)}` : ''
+	return `${result.pathname}${search}${hash}`
+}
+
+const evaluateRouteGuard = ({
+	guard,
+	beforeEnter,
+	match,
+	currentLocation,
+})=> {
+	const resolver = typeof guard === 'function' ? guard : typeof beforeEnter === 'function' ? beforeEnter : null
+	if (!resolver){
+		return {
+			allow: true,
+			redirectTo: null,
+		}
+	}
+
+	const result = resolver({
+		to: match,
+		from: currentLocation,
+		params: match.params,
+		query: match.query,
+		pathname: match.pathname,
+		search: match.search,
+		hash: match.hash,
+	})
+
+	if (result === true || result == null){
+		return {
+			allow: true,
+			redirectTo: null,
+		}
+	}
+
+	const redirectTo = normalizeGuardRedirect(result)
+	if (redirectTo){
+		return {
+			allow: false,
+			redirectTo,
+		}
+	}
+
+	return {
+		allow: false,
+		redirectTo: null,
+	}
+}
+
 // Build a reactive Match element from a flat list of RouteDescriptors.
 // Parent routes (those with nested route children) use prefix matching;
 // leaf routes use exact equality matching.
@@ -195,36 +262,65 @@ const buildRouteMatch = (routes, currentLocation, basePath)=> {
 	// Compute the index of the currently active route reactively.
 	// Returning -1 means "no match" → Match falls through to defaultBranch.
 	const readCandidateMatch = ()=> {
-		const location = currentLocation()
-		const pathname = location.pathname
+		const resolveCandidateMatch = (location, redirectDepth = 0)=> {
+			const pathname = location.pathname
 
-		for (const [i, r] of nonDefault.entries()){
-			const fullPath = joinPaths(basePath, r.when)
-			const isParent = r.nestedRoutes && r.nestedRoutes.length > 0
-			const matcher = createRouteMatcher(fullPath)
-			const params = isParent ? matcher.matchPrefix(pathname) : matcher.matchExact(pathname)
-			if (params){
-				return {
-					index: i,
-					match: createRouteMatchInfo({
+			for (const [i, r] of nonDefault.entries()){
+				const fullPath = joinPaths(basePath, r.when)
+				const isParent = r.nestedRoutes && r.nestedRoutes.length > 0
+				const matcher = createRouteMatcher(fullPath)
+				const params = isParent ? matcher.matchPrefix(pathname) : matcher.matchExact(pathname)
+				if (params){
+					const match = createRouteMatchInfo({
 						routePath: fullPath,
 						pathname,
 						params,
 						location,
-					}),
+					})
+					const guardState = evaluateRouteGuard({
+						guard: r.guard,
+						beforeEnter: r.beforeEnter,
+						match,
+						currentLocation: location,
+					})
+					if (!guardState.allow){
+						if (guardState.redirectTo){
+							const target = normalizeTarget(guardState.redirectTo)
+							const currentTarget = `${location.pathname}${location.search}${location.hash}`
+							if (target !== currentTarget && redirectDepth < nonDefault.length){
+								sharedRouterState.navigate(target, {
+									replace: true,
+								})
+								return resolveCandidateMatch(createLocation(target), redirectDepth + 1)
+							}
+						}
+						continue
+					}
+
+					return {
+						index: i,
+						match,
+					}
 				}
 			}
-		}
 
-		return {
-			index: -1,
-			match: defaultRoute? createRouteMatchInfo({
+			let defaultMatch = null
+			if (defaultRoute){
+				defaultMatch = createRouteMatchInfo({
 					routePath: '*',
 					pathname,
 					params: {},
 					location,
-				}): null,
+				})
+			}
+
+			return {
+				index: -1,
+				match: defaultMatch,
+			}
 		}
+
+		return resolveCandidateMatch(currentLocation())
 	}
 
 	const activeIndex = ()=> {
@@ -246,18 +342,19 @@ const buildRouteMatch = (routes, currentLocation, basePath)=> {
 		},
 	}))
 
-	const defaultBranch = defaultRoute
-? ()=> {
-		const candidate = readCandidateMatch()
-		if (!candidate.match){
-			return defaultRoute.branch(null)
+	let defaultBranch
+	if (defaultRoute){
+		defaultBranch = ()=> {
+			const candidate = readCandidateMatch()
+			if (!candidate.match){
+				return defaultRoute.branch(null)
+			}
+			return h(RouteMatchContext.Provider, {
+				value: candidate.match,
+				children: ()=> defaultRoute.branch(candidate.match),
+			})
 		}
-		return h(RouteMatchContext.Provider, {
-			value: candidate.match,
-			children: ()=> defaultRoute.branch(candidate.match),
-		})
 	}
-: undefined
 
 	return h(Match, {
 		value: activeIndex,
@@ -383,6 +480,8 @@ const Router = ({ children, root = '/' })=> {
 const Route = ({
 	path = '/',
 	index = false,
+	guard,
+	beforeEnter,
 	component,
 	children,
 	...componentProps
@@ -474,7 +573,7 @@ const Route = ({
 
 	const marker = document.createComment('route')
 	marker._routeDescriptor = {
-		when: expectedPath, branch: renderMatch, isDefault, nestedRoutes,
+		when: expectedPath, branch: renderMatch, isDefault, nestedRoutes, guard, beforeEnter,
 	}
 	return marker
 }

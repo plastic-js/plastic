@@ -269,6 +269,50 @@ describe('router', ()=> {
 		expect(container.textContent).toContain('trending')
 	})
 
+	it('blocks guarded routes and falls through to a catch-all route', ()=> {
+		window.history.replaceState(null, '', '/admin')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const App = ()=> h(Router, null,
+			h(Route, {
+				path: '/admin',
+				guard: ()=> false,
+			}, h('p', null, 'Admin')),
+			h(Route, {
+				path: '*',
+			}, h('p', null, 'Not found')),
+		)
+
+		renderApp(container, h(App))
+		expect(window.location.pathname).toBe('/admin')
+		expect(container.textContent).toBe('Not found')
+	})
+
+	it('redirects guarded routes with beforeEnter', ()=> {
+		window.history.replaceState(null, '', '/admin')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const App = ()=> h(Router, null,
+			h(Route, {
+				path: '/admin',
+				beforeEnter: ({ pathname })=> ({
+					pathname: '/login',
+					search: { redirect: pathname },
+				}),
+			}, h('p', null, 'Admin')),
+			h(Route, {
+				path: '/login',
+			}, h('p', null, 'Login')),
+		)
+
+		renderApp(container, h(App))
+		expect(window.location.pathname).toBe('/login')
+		expect(window.location.search).toBe('?redirect=%2Fadmin')
+		expect(container.textContent).toBe('Login')
+	})
+
 	describe('nested routes', ()=> {
 		it('renders a nested child route via Outlet', ()=> {
 			window.history.replaceState(null, '', '/settings/profile')

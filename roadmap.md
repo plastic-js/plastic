@@ -98,7 +98,7 @@
   - [X] Export router APIs from the public entry and cover initial render, route changes, link clicks, and back/forward navigation in tests.
 - [X] Support route parameters and query strings.
 - [X] Support nested routes and `Outlet`-based child route rendering.
-- [ ] Support route guards.
+- [X] Support route guards — synchronous `guard` / `beforeEnter` hooks on `<Route>`; returning `false` blocks the route; returning a string or `{ pathname, search, hash }` object redirects with `replace: true`.
 - [X] Implement a Link component for navigation.
 - [ ] Support dynamic route matching and route transitions.
 
