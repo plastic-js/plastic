@@ -559,5 +559,37 @@ describe('router', ()=> {
 			renderApp(container, h(App))
 			expect(container.textContent).toContain('acme:7')
 		})
+
+		it('resolves Link relative paths against the current route hierarchy', ()=> {
+			window.history.replaceState(null, '', '/settings/profile')
+			const container = document.createElement('div')
+			document.body.appendChild(container)
+
+			const Settings = ()=> h('section', null, h(Outlet, null))
+			const Profile = ()=> h('div', null, h(Link, {
+				to: '../security',
+			}, 'Go security'))
+			const Security = ()=> h('p', null, 'Security page')
+
+			const App = ()=> h(Router, null,
+				h(Route, { path: '/settings', component: Settings },
+					h(Route, { path: '/profile', component: Profile }),
+					h(Route, { path: '/security', component: Security }),
+				),
+			)
+
+			renderApp(container, h(App))
+			const link = container.querySelector('a')
+			expect(link.getAttribute('href')).toBe('/settings/security')
+
+			link.dispatchEvent(new MouseEvent('click', {
+				bubbles: true,
+				button: 0,
+				cancelable: true,
+			}))
+
+			expect(window.location.pathname).toBe('/settings/security')
+			expect(container.textContent).toContain('Security page')
+		})
 	})
 })

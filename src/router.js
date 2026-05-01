@@ -102,6 +102,66 @@ const normalizePath = (value)=> {
 	return path || '/'
 }
 
+const ensureTrailingSlash = (path)=> {
+	const normalized = normalizePath(path)
+	if (normalized === '/'){
+		return '/'
+	}
+	return normalized.endsWith('/') ? normalized : `${normalized}/`
+}
+
+const hasUriScheme = value=> (/^[A-Za-z][A-Za-z\d+\-.]*:/).test(value)
+
+const isRelativePathValue = (value)=> {
+	if (typeof value !== 'string'){
+		return false
+	}
+	if (!value || value.startsWith('/')){
+		return false
+	}
+	if (value.startsWith('//') || hasUriScheme(value)){
+		return false
+	}
+	return true
+}
+
+const resolveMatchPath = (routeMatch)=> {
+	if (!routeMatch || routeMatch.path === '*'){
+		return null
+	}
+
+	const params = routeMatch.params || {}
+	const resolved = String(routeMatch.path)
+		.replace(/:([A-Za-z0-9_]+)/g, (_, key)=> {
+			const value = params[key]
+			if (value == null){
+				return `:${key}`
+			}
+			return encodeURIComponent(String(value))
+		})
+
+	return normalizePath(resolved)
+}
+
+const resolveRelativeTarget = (target, basePath)=> {
+	const url = new URL(target, `https://plastic.local${ensureTrailingSlash(basePath)}`)
+	return `${normalizePath(url.pathname || '/')}${url.search || ''}${url.hash || ''}`
+}
+
+const resolveNavigationTarget = ({
+	target,
+	routeMatch,
+	currentPath,
+})=> {
+	const value = typeof target === 'function' ? target() : target
+	if (!isRelativePathValue(value)){
+		return normalizeTarget(value)
+	}
+
+	const basePath = resolveMatchPath(routeMatch) || normalizePath(currentPath || '/')
+	return resolveRelativeTarget(value, basePath)
+}
+
 // Contexts ─────────────────────────────────────────────────────────────────
 // RouterContext: { currentPath: ()=> string, currentLocation: Signal<Location>, basePath: string }
 // Provided by Router; updated by each parent Route so nested branches can
@@ -665,7 +725,15 @@ const useMatch = (path)=> {
 
 const isPlainLeftClick = event=> event.button === 0 && !event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey
 
-const resolveLinkTarget = to=> normalizeTarget(typeof to === 'function' ? to() : to)
+const resolveLinkTarget = ({
+	to,
+	routeMatch,
+	currentPath,
+})=> resolveNavigationTarget({
+	target: to,
+	routeMatch,
+	currentPath,
+})
 
 const isPathPrefixMatch = (pathname, targetPath)=> pathname === targetPath || pathname.startsWith(`${targetPath}/`)
 
@@ -693,7 +761,13 @@ const Link = ({
 	children,
 	...props
 })=> {
-	const resolveTarget = ()=> resolveLinkTarget(to)
+	const routeMatch = useRoute()
+	const location = useLocation()
+	const resolveTarget = ()=> resolveLinkTarget({
+		to,
+		routeMatch,
+		currentPath: location().pathname,
+	})
 	const href = ()=> {
 		sharedRouterVersion()
 		return sharedRouterState.createHref(resolveTarget())
@@ -733,7 +807,12 @@ const NavLink = ({
 	...props
 })=> {
 	const location = useLocation()
-	const resolveTarget = ()=> resolveLinkTarget(to)
+	const routeMatch = useRoute()
+	const resolveTarget = ()=> resolveLinkTarget({
+		to,
+		routeMatch,
+		currentPath: location().pathname,
+	})
 	const targetPath = ()=> stripQueryAndHash(resolveTarget())
 	const isActive = ()=> isNavLinkActive({
 		currentPath: location().pathname,
