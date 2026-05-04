@@ -9,6 +9,7 @@ import { createControlFlow } from './control-flow.js'
 
 const Fragment = Symbol('Fragment')
 const OWNER = Symbol('owner')
+const COMPONENT_DESCRIPTOR = Symbol('component-descriptor')
 
 // ============ Owner & Lifecycle Management ============
 // Global context for effect scoping and cleanup tracking
@@ -196,6 +197,16 @@ const useContext = (context)=> {
 	return context.defaultValue
 }
 
+const createComponentDescriptor = (tag, props, children)=> ({
+	[COMPONENT_DESCRIPTOR]: true,
+	tag,
+	props,
+	children,
+	instance: null,
+})
+
+const isComponentDescriptor = value=> value != null && typeof value === 'object' && value[COMPONENT_DESCRIPTOR] === true
+
 const isReactivePrimitive = value=> value != null && (isSignal(value) || isComputed(value))
 const isReactive = value=> isReactivePrimitive(value) || typeof value === 'function'
 const createPlaceholder = ()=> document.createComment('null')
@@ -256,6 +267,27 @@ const createReactiveTextNode = (reactiveValue)=> {
 	})
 
 	return textNode
+}
+
+const materializeComponentDescriptor = (descriptor)=> {
+	if (descriptor.instance instanceof Node){
+		return descriptor.instance
+	}
+
+	const owner = createOwner(currentOwner)
+	const componentProps = {
+		...descriptor.props,
+		children: descriptor.children.length === 1 ? descriptor.children[0] : descriptor.children,
+	}
+	const result = runWithOwner(owner, ()=> descriptor.tag(componentProps))
+	const normalized = renderInOwner(owner, result)
+
+	if (normalized instanceof Node){
+		normalized[OWNER] = owner
+	}
+
+	descriptor.instance = normalized
+	return normalized
 }
 
 const createReactiveChildNode = (reactiveValue)=> {
@@ -383,7 +415,11 @@ const applyStyleProp = (element, value)=> {
 
 const clearDomProp = (element, key)=> {
 	if (key in element){
-		element[key] = ''
+		try {
+			element[key] = ''
+		} catch {
+			// Some DOM properties (for example HTMLInputElement.form) are readonly.
+		}
 	}
 
 	element.removeAttribute(key)
@@ -424,8 +460,12 @@ const setDomProp = (element, key, value)=> {
 		if (prev === value){
 			return
 		}
-		element[key] = value
-		return
+		try {
+			element[key] = value
+			return
+		} catch {
+			// Fall through to attribute writes for readonly DOM properties.
+		}
 	}
 
 	const next = String(value)
@@ -522,6 +562,9 @@ const node2Element = (node)=> {
 	if (node === null || node === undefined){
 		return createPlaceholder()
 	}
+	if (isComponentDescriptor(node)){
+		return materializeComponentDescriptor(node)
+	}
 	if (isReactivePrimitive(node)){
 		return createReactiveTextNode(node)
 	}
@@ -541,6 +584,8 @@ const node2Element = (node)=> {
 	}
 	return createPlaceholder()
 }
+
+const materializeNode = (node)=> node2Element(node)
 
 // Ignore empty JSX children and append everything else after normalization.
 const appendChild = (parent, child)=> {
@@ -608,20 +653,7 @@ const h = (tag, props, ...children)=> {
 	}
 
 	if (typeof tag === 'function'){
-		// Create an owner for this component instance
-		const owner = createOwner(currentOwner)
-
-		// Function components receive a single props object; children are injected under props.children.
-		const componentProps = { ...nextProps, children: mergedChildren.length === 1 ? mergedChildren[0] : mergedChildren }
-		const result = runWithOwner(owner, ()=> tag(componentProps))
-		const normalized = renderInOwner(owner, result)
-
-		// Attach owner to result for unmount tracking
-		if (normalized instanceof Node){
-			normalized[OWNER] = owner
-		}
-
-		return normalized
+		return createComponentDescriptor(tag, nextProps, mergedChildren)
 	}
 
 	if (typeof tag !== 'string'){
@@ -715,6 +747,7 @@ export {
 	setDomProp,
 	applyCommonAttribute,
 	applyProps,
+	materializeNode,
 	node2Element,
 	appendChild,
 	appendChildren,

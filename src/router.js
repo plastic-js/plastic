@@ -3,6 +3,7 @@ import {
 	createContext,
 	createSignal,
 	h,
+	materializeNode,
 	registerCleanup,
 	useContext,
 } from './jsx-runtime.js'
@@ -509,8 +510,9 @@ const Router = ({ children, root = '/' })=> {
 	}
 
 	const childArray = Array.isArray(children) ? children : [children]
-	const routeMarkers = childArray.filter(child=> child instanceof Comment && child._routeDescriptor)
-	const otherChildren = childArray.filter(child=> !(child instanceof Comment && child._routeDescriptor))
+	const isRouteChild = child=> child instanceof Comment && child._routeDescriptor || child != null && typeof child === 'object' && child.tag === Route
+	const routeMarkers = childArray.filter(isRouteChild).map(child=> materializeNode(child)).filter(child=> child instanceof Comment && child._routeDescriptor)
+	const otherChildren = childArray.filter(child=> !isRouteChild(child))
 
 	const routes = routeMarkers.map(child=> child._routeDescriptor)
 
@@ -528,11 +530,12 @@ const Router = ({ children, root = '/' })=> {
 
 			const fragment = document.createDocumentFragment()
 			otherChildren.forEach((child)=> {
-				if (child instanceof Node){
-					fragment.appendChild(child)
+				const node = materializeNode(child)
+				if (node instanceof Node){
+					fragment.appendChild(node)
 				}
 			})
-			fragment.appendChild(matchElement)
+			fragment.appendChild(materializeNode(matchElement))
 			return fragment
 		},
 	})
@@ -555,10 +558,11 @@ const Route = ({
 	// they are treated as leaf content only.
 	const isFunctionChildren = typeof children === 'function'
 	const childArray = isFunctionChildren || children === undefined ? [] : Array.isArray(children) ? children : [children]
+	const isNestedRouteChild = child=> child instanceof Comment && child._routeDescriptor || child != null && typeof child === 'object' && child.tag === Route
 
-	const nestedRouteMarkers = childArray.filter(c=> c instanceof Comment && c._routeDescriptor)
+	const nestedRouteMarkers = childArray.filter(isNestedRouteChild).map(child=> materializeNode(child)).filter(child=> child instanceof Comment && child._routeDescriptor)
 	const nestedRoutes = nestedRouteMarkers.map(c=> c._routeDescriptor)
-	const contentChildren = childArray.filter(c=> !(c instanceof Comment && c._routeDescriptor))
+	const contentChildren = childArray.filter(child=> !isNestedRouteChild(child))
 
 	const hasNestedRoutes = nestedRoutes.length > 0
 	const hasContentChildren = contentChildren.length > 0
@@ -612,8 +616,13 @@ const Route = ({
 						return nestedMatch
 					}
 					const frag = document.createDocumentFragment()
-					contentChildren.forEach((c)=> { if (c instanceof Node){ frag.appendChild(c) } })
-					frag.appendChild(nestedMatch)
+					contentChildren.forEach((child)=> {
+						const node = materializeNode(child)
+						if (node instanceof Node){
+							frag.appendChild(node)
+						}
+					})
+					frag.appendChild(materializeNode(nestedMatch))
 					return frag
 				},
 			})

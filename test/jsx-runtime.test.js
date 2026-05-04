@@ -27,6 +27,13 @@ import {
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
 
+const mountNode = (node)=> {
+	const container = document.createElement('div')
+	document.body.appendChild(container)
+	renderApp(container, node)
+	return container.firstChild
+}
+
 describe('jsx runtime static rendering', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
@@ -419,7 +426,7 @@ describe('jsx runtime static rendering', ()=> {
 			appendChildren(div, Array.isArray(children) ? children : [children])
 			return div
 		}
-		const element = h(Wrapper, null, h('p', null, 'inner'))
+		const element = mountNode(h(Wrapper, null, h('p', null, 'inner')))
 
 		expect(element.tagName).toBe('DIV')
 		expect(element.className).toBe('wrapper')
@@ -432,7 +439,7 @@ describe('jsx runtime static rendering', ()=> {
 			expect(Array.isArray(children)).toBe(false)
 			return h('div', null, children)
 		}
-		const element = h(Wrapper, null, h('p', null, 'solo'))
+		const element = mountNode(h(Wrapper, null, h('p', null, 'solo')))
 
 		expect(element.firstChild.tagName).toBe('P')
 		expect(element.firstChild.textContent).toBe('solo')
@@ -444,7 +451,7 @@ describe('jsx runtime static rendering', ()=> {
 			expect(children).toHaveLength(2)
 			return h('ul', null, children)
 		}
-		const element = h(List, null, h('li', null, 'a'), h('li', null, 'b'))
+		const element = mountNode(h(List, null, h('li', null, 'a'), h('li', null, 'b')))
 
 		expect(element.querySelectorAll('li')).toHaveLength(2)
 		expect(element.querySelectorAll('li')[0].textContent).toBe('a')
@@ -454,7 +461,7 @@ describe('jsx runtime static rendering', ()=> {
 	it('passes reactive props to function components', ()=> {
 		const Label = ({ text })=> h('label', null, text)
 		const text = createSignal('draft')
-		const element = h(Label, { text })
+		const element = mountNode(h(Label, { text }))
 
 		expect(element.textContent).toBe('draft')
 
@@ -504,7 +511,7 @@ describe('jsx runtime static rendering', ()=> {
 			summary: scoreText,
 		})
 
-		const element = h(Parent)
+		const element = mountNode(h(Parent))
 
 		expect(element.textContent).toBe('score:2')
 
@@ -515,11 +522,11 @@ describe('jsx runtime static rendering', ()=> {
 
 	it('renders Dynamic using component as h tag argument', ()=> {
 		const tag = 'section'
-		const element = h(Dynamic, {
+		const element = mountNode(h(Dynamic, {
 			component: tag,
 			className: 'panel',
 			children: 'content',
-		})
+		}))
 
 		expect(element.tagName).toBe('SECTION')
 		expect(element.className).toBe('panel')
@@ -564,6 +571,19 @@ describe('context api', ()=> {
 			value: 'dark',
 			children: ()=> h(Label),
 		})
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+
+		expect(container.textContent).toBe('dark')
+	})
+
+	it('lets Provider establish context for direct eager child component calls', ()=> {
+		const ThemeContext = createContext('light')
+		const Label = ()=> h('span', null, useContext(ThemeContext))
+		const App = ()=> h(ThemeContext.Provider, {
+			value: 'dark',
+		}, h(Label))
 		const container = document.createElement('div')
 
 		renderApp(container, h(App))
