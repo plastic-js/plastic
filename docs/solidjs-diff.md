@@ -17,6 +17,7 @@ Plastic follows the same direction as Solid.js (no Virtual DOM + fine-grained re
 
 - Covered: core reactivity, JSX rendering, basic lifecycle, context, control flow, CSR routing
 - Not covered: SSR/Hydration, Suspense/Resource, error boundaries, scheduling/concurrency helpers, many Solid ecosystem APIs
+- Plastic is **CSR-only** — there is **no plan** to support Server-Side Rendering (SSR) or hydration
 - Most important semantic differences: signal shape, event binding strategy, classList support, control-flow naming/compile conventions
 
 ## 3. High-Frequency API Comparison
