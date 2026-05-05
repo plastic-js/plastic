@@ -878,20 +878,24 @@ const lazy = (importFn, options = {})=> {
 		Promise.resolve(importFn()).then((mod)=> {
 			resolved(mod.default ?? mod)
 			return mod
-		}).catch(()=> {})
+		}).catch((error)=> {
+			console.error(error)
+		})
 	}
 
 	const LazyComponent = (props)=> {
 		ensureLoaded()
-		const Component = resolved()
-		if (!Component){
-			const { fallback } = options
-			if (typeof fallback === 'function'){
-				return h(fallback, {})
+		return ()=> {
+			const Component = resolved()
+			if (!Component){
+				const { fallback } = options
+				if (typeof fallback === 'function'){
+					return h(fallback, {})
+				}
+				return fallback ?? null
 			}
-			return fallback ?? null
+			return h(Component, props)
 		}
-		return h(Component, props)
 	}
 
 	return LazyComponent
