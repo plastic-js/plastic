@@ -1,5 +1,5 @@
 import {
-	createComputed, createSignal, createTree, effect, isComputed, isSignal, isTree, toRaw,
+	createComputed, createSignal, createTree, effect, isComputed, isSignal, isTree, runUntracked, toRaw,
 } from './reactivity.js'
 import {
 	flattenChildren, isEventProp, normalizeTextNodeValue, toClassMap, toClassTokens,
@@ -37,14 +37,16 @@ const createOwner = (parent = null)=> {
 }
 
 const runOwnerMounts = (owner)=> {
-	owner.children.forEach(child=> runOwnerMounts(child))
-	owner.refs.forEach((fn)=> {
-		fn()
+	runUntracked(()=> {
+		owner.children.forEach(child=> runOwnerMounts(child))
+		owner.refs.forEach((fn)=> {
+			fn()
+		})
+		owner.mounts.forEach((fn)=> {
+			fn()
+		})
+		owner.mounted = true
 	})
-	owner.mounts.forEach((fn)=> {
-		fn()
-	})
-	owner.mounted = true
 }
 
 const runWithOwner = (owner, fn)=> {
@@ -86,6 +88,15 @@ const disposeOwner = (owner)=> {
 	owner.mounts.length = 0
 }
 
+const flushCleanups = (list)=> {
+	runUntracked(()=> {
+		[...list].reverse().forEach((l)=> {
+			l()
+		})
+		list.length = 0
+	})
+}
+
 // Create a binding effect that integrates with the owner system
 const createBindingEffect = (runner)=> {
 	const owner = currentOwner
@@ -93,11 +104,8 @@ const createBindingEffect = (runner)=> {
 	const local = []
 
 	const stop = effect(()=> {
-		// Run effect-level cleanups in reverse order
-		[...local].reverse().forEach((l)=> {
-			l()
-		})
-		local.length = 0
+		// Run effect-level cleanups in reverse order, untracked to avoid accidental dependency registration
+		flushCleanups(local)
 
 		// Set up computation context for onCleanup within the effect
 		const prevComp = getCurrentComputation()
@@ -115,12 +123,8 @@ const createBindingEffect = (runner)=> {
 	// Register effect and its disposal in the owner
 	owner.effects.push(stop)
 	owner.cleanups.push(()=> {
-		// Run remaining local cleanups
-		[...local].reverse().forEach((l)=> {
-			l()
-		})
-
-		local.length = 0
+		// Run remaining local cleanups, untracked to avoid accidental dependency registration
+		flushCleanups(local)
 	})
 
 	return stop
@@ -279,8 +283,8 @@ const materializeComponentDescriptor = (descriptor)=> {
 		...descriptor.props,
 		children: descriptor.children.length === 1 ? descriptor.children[0] : descriptor.children,
 	}
-	const result = runWithOwner(owner, ()=> descriptor.tag(componentProps))
-	const normalized = renderInOwner(owner, result)
+	const result = runUntracked(()=> runWithOwner(owner, ()=> descriptor.tag(componentProps)))
+	const normalized = runUntracked(()=> renderInOwner(owner, result))
 
 	if (normalized instanceof Node){
 		normalized[OWNER] = owner
@@ -313,12 +317,15 @@ const createReactiveChildNode = (reactiveValue)=> {
 
 		if (nextNode instanceof DocumentFragment){
 			mountedNodes = [...nextNode.childNodes]
-			parent.insertBefore(nextNode, end)
-			return
+		} else {
+			mountedNodes = [nextNode]
 		}
 
-		mountedNodes = [nextNode]
 		parent.insertBefore(nextNode, end)
+		const nodeOwner = nextNode[OWNER]
+		if (nodeOwner && !nodeOwner.mounted && start.isConnected){
+			runOwnerMounts(nodeOwner)
+		}
 	})
 
 	return fragment
@@ -585,7 +592,7 @@ const node2Element = (node)=> {
 	return createPlaceholder()
 }
 
-const materializeNode = (node)=> node2Element(node)
+const materializeNode = node=> node2Element(node)
 
 // Ignore empty JSX children and append everything else after normalization.
 const appendChild = (parent, child)=> {

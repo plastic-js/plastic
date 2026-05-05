@@ -324,6 +324,23 @@ const tree = (obj)=> {
 	return proxy
 }
 
+// Component bodies must not subscribe to the reactive context above them. If
+// the materializer happens to run inside an outer effect (e.g. a router
+// outlet), every signal read by the component would re-trigger that outer
+// effect — re-mounting the whole subtree on every unrelated state change.
+// Internal binding effects/computations create their own active subscribers,
+// so suppressing the outer one here only affects bare signal reads in the
+// component body.
+const runUntracked = (fn)=> {
+	const prevSub = getActiveSub()
+	setActiveSub(undefined)
+	try {
+		return fn()
+	} finally {
+		setActiveSub(prevSub)
+	}
+}
+
 const createSignal = (value)=> {
 	if (typeof value === 'function' && isSignal(value)){
 		return value
@@ -361,5 +378,5 @@ const batch = (fn)=> {
 }
 
 export {
-	batch, effect, isComputed, isSignal, isTree, toRaw, createSignal, createTree, computed as createComputed,
+	batch, effect, runUntracked, isComputed, isSignal, isTree, toRaw, createSignal, createTree, computed as createComputed,
 }

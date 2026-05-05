@@ -859,6 +859,137 @@ describe('lifecycle & cleanup management', ()=> {
 	})
 })
 
+describe('onMount in reactive branches (regression: e0181d0)', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('fires onMount for components rendered inside a function child', ()=> {
+		const mountFn = vi.fn()
+
+		const Child = ()=> {
+			onMount(mountFn)
+			return h('span', null, 'child')
+		}
+
+		const App = ()=> h('div', null, ()=> h(Child))
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(App))
+
+		expect(mountFn).toHaveBeenCalledTimes(1)
+		expect(container.textContent).toBe('child')
+	})
+
+	it('fires onMount for swapped branches inside a function child', ()=> {
+		const mountA = vi.fn()
+		const mountB = vi.fn()
+		const toggle = createSignal(true)
+
+		const BranchA = ()=> {
+			onMount(mountA)
+			return h('p', null, 'A')
+		}
+
+		const BranchB = ()=> {
+			onMount(mountB)
+			return h('p', null, 'B')
+		}
+
+		const App = ()=> h('div', null, ()=> toggle() ? h(BranchA) : h(BranchB))
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(App))
+
+		expect(mountA).toHaveBeenCalledTimes(1)
+		expect(mountB).toHaveBeenCalledTimes(0)
+		expect(container.textContent).toBe('A')
+
+		toggle(false)
+
+		expect(mountA).toHaveBeenCalledTimes(1)
+		expect(mountB).toHaveBeenCalledTimes(1)
+		expect(container.textContent).toBe('B')
+
+		toggle(true)
+
+		expect(mountA).toHaveBeenCalledTimes(2)
+		expect(mountB).toHaveBeenCalledTimes(1)
+		expect(container.textContent).toBe('A')
+	})
+
+	it('does not leak signal reads in onMount to enclosing reactive effect', ()=> {
+		const effectSpy = vi.fn()
+		const show = createSignal(true)
+		const unrelated = createSignal(0)
+
+		const Branch = ()=> {
+			onMount(()=> {
+				unrelated()
+			})
+			return h('span', null, 'branch')
+		}
+
+		const Other = ()=> h('span', null, 'other')
+
+		const App = ()=> h('div', null, ()=> {
+			effectSpy()
+			return show() ? h(Branch) : h(Other)
+		})
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(App))
+
+		expect(effectSpy).toHaveBeenCalledTimes(1)
+
+		show(false)
+		expect(effectSpy).toHaveBeenCalledTimes(2)
+
+		show(true)
+		// Branch is re-created, onMount runs inside the effect via runOwnerMounts
+		expect(effectSpy).toHaveBeenCalledTimes(3)
+
+		unrelated(99)
+
+		expect(effectSpy).toHaveBeenCalledTimes(3)
+	})
+
+	it('does not leak signal reads in effect-level cleanup to enclosing effect', ()=> {
+		const effectSpy = vi.fn()
+		const show = createSignal(true)
+		const unrelated = createSignal(0)
+
+		const Child = ()=> {
+			onCleanup(()=> {
+				unrelated()
+			})
+			return h('span', null, 'child')
+		}
+
+		const App = ()=> h('div', null, ()=> {
+			effectSpy()
+			return show() ? h(Child) : null
+		})
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(App))
+
+		expect(effectSpy).toHaveBeenCalledTimes(1)
+
+		show(false)
+		// Effect re-runs: flushCleanups reads unrelated(), then runner runs
+		expect(effectSpy).toHaveBeenCalledTimes(2)
+
+		unrelated(99)
+		// Should NOT have re-run if flushCleanups used runUntracked
+		expect(effectSpy).toHaveBeenCalledTimes(2)
+	})
+})
+
 describe('control flow: Either and mountDynamic', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
