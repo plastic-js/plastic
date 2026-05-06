@@ -516,10 +516,121 @@ const applyRefProp = (element, ref)=> {
 	}
 }
 
+// Counterpart of the babel-plugin-transform-jsx-reactive spread rewrite.
+// `<div {...expr} />` is compiled to a `__rspread__N: () => expr` prop, which
+// `applyProps` forwards here so the source object is re-evaluated reactively.
+const REACTIVE_SPREAD_PREFIX = '__rspread__'
+const isReactiveSpreadKey = key=> typeof key === 'string' && key.startsWith(REACTIVE_SPREAD_PREFIX)
+
+const applyReactiveSpread = (element, thunk)=> {
+	let prevKeys = new Set()
+	const attachedEvents = new Map()
+
+	const detachEvent = (eventName)=> {
+		const handler = attachedEvents.get(eventName)
+		if (handler){
+			element.removeEventListener(eventName, handler)
+			attachedEvents.delete(eventName)
+		}
+	}
+
+	if (currentOwner || getCurrentComputation()){
+		registerCleanup(()=> {
+			attachedEvents.forEach((handler, eventName)=> {
+				element.removeEventListener(eventName, handler)
+			})
+			attachedEvents.clear()
+		})
+	}
+
+	createBindingEffect(()=> {
+		const resolved = resolveReactiveValue(thunk)
+		const next = (resolved && typeof resolved === 'object') ? resolved : {}
+		const nextKeys = new Set(Object.keys(next))
+
+		// Drop attributes/handlers present last run but absent this run.
+		prevKeys.forEach((key)=> {
+			if (nextKeys.has(key)){
+				return
+			}
+			if (key === 'children' || key === 'ref' || key === 'classList'){
+				return
+			}
+			if (isEventProp(key)){
+				detachEvent(key.slice(2).toLowerCase())
+				return
+			}
+			if (key === 'className' || key === 'class'){
+				element.removeAttribute('class')
+				return
+			}
+			if (key === 'style'){
+				element.removeAttribute('style')
+				return
+			}
+			const domKey = JSX_PROP_MAP[key] ?? key
+			clearDomProp(element, domKey)
+		})
+
+		// Apply the current snapshot. Values inside the spread are treated as
+		// plain (non-reactive) — the outer effect already re-runs on changes.
+		Object.entries(next).forEach(([key, value])=> {
+			if (key === 'children' || key === 'ref' || key === 'classList'){
+				return
+			}
+
+			if (isEventProp(key)){
+				const eventName = key.slice(2).toLowerCase()
+				detachEvent(eventName)
+				if (typeof value === 'function' && isSupportedEvent(element, eventName)){
+					element.addEventListener(eventName, value)
+					attachedEvents.set(eventName, value)
+				}
+				return
+			}
+
+			if (key === 'className' || key === 'class'){
+				if (value == null || value === false || value === ''){
+					element.removeAttribute('class')
+				} else {
+					element.setAttribute('class', String(value))
+				}
+				return
+			}
+
+			if (key === 'style'){
+				if (value == null || value === false){
+					element.removeAttribute('style')
+					return
+				}
+				if (typeof value === 'string'){
+					element.style.cssText = value
+					return
+				}
+				if (typeof value === 'object'){
+					element.style.cssText = ''
+					applyStyleObject(element, value)
+				}
+				return
+			}
+
+			const domKey = JSX_PROP_MAP[key] ?? key
+			setDomProp(element, domKey, value)
+		})
+
+		prevKeys = nextKeys
+	})
+}
+
 const applyProps = (element, props = {})=> {
 	const entries = Object.entries(props)
 	entries.forEach(([key, value])=> {
 		if (key === 'children'){
+			return
+		}
+
+		if (isReactiveSpreadKey(key)){
+			applyReactiveSpread(element, value)
 			return
 		}
 

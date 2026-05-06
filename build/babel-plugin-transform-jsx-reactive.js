@@ -9,7 +9,7 @@
  * `transform-dynamic` was a strict superset of `transform-ternary`, so they
  * are merged here into one comprehensive plugin.
  *
- * Two transforms are applied:
+ * Three transforms are applied:
  *
  *   1. JSX children expressions:
  *      `<div>{someSignal()}</div>`
@@ -18,6 +18,15 @@
  *   2. Intrinsic element attribute values (non-event, non-ref):
  *      `<input disabled={isDisabled()} />`
  *      → `<input disabled={() => isDisabled()} />`
+ *
+ *   3. JSX spread attributes whose source is non-static:
+ *      `<div a={x} {...api().getRootProps()} b={y} />`
+ *      → `<div a={x} __rspread__0={() => api().getRootProps()} b={y} />`
+ *      The runtime recognises the `__rspread__N` prefix and applies the
+ *      thunk's output reactively, preserving JSX prop order so that
+ *      attributes after the spread can still override its keys at apply
+ *      time. Each element gets its own counter so multiple spreads on the
+ *      same element produce distinct keys.
  *
  * Expressions that are provably static (literals, identifiers, inline
  * functions, plain objects/arrays with no dynamic parts, etc.) are left
@@ -215,6 +224,38 @@ const plugin = function(babel){
 			 *  - `children` — managed separately (as JSX children or lazy factories).
 			 *  - Already-static expressions — no wrapper needed.
 			 */
+			/**
+			 * Wrap dynamic spread attributes so the runtime can track them.
+			 *
+			 * `<div a={x} {...expr} b={y} />`
+			 * → `<div a={x} __rspread__0={() => expr} b={y} />`
+			 *
+			 * The `__rspread__N` prefix is the contract with the runtime's
+			 * `applyProps` function, which detects it and re-evaluates the
+			 * thunk inside a binding effect. Per-element counter keeps
+			 * multiple spreads on the same element distinct.
+			 *
+			 * Static spread sources (e.g. `{...{foo: 1}}`) are left to the
+			 * standard JSX transform, which inlines them with no overhead.
+			 */
+			JSXOpeningElement(path){
+				const attributes = path.node.attributes
+				let spreadIndex = 0
+				for (let i = 0; i < attributes.length; i++){
+					const attribute = attributes[i]
+					if (!t.isJSXSpreadAttribute(attribute)){
+						continue
+					}
+					if (isStaticExpression(attribute.argument)){
+						continue
+					}
+
+					const wrapped = t.arrowFunctionExpression([], attribute.argument)
+					const propName = `__rspread__${spreadIndex++}`
+					attributes[i] = t.jsxAttribute(t.jsxIdentifier(propName), t.jsxExpressionContainer(wrapped))
+				}
+			},
+
 			JSXAttribute(path){
 				const attributeName = path.node.name
 
@@ -226,12 +267,34 @@ const plugin = function(babel){
 					return
 				}
 
-				if (isEventPropName(attributeName.name) || attributeName.name === 'ref' || attributeName.name === 'children'){
+				if (attributeName.name === 'ref' || attributeName.name === 'children'){
 					return
 				}
 
 				const expression = path.get('value.expression')
 				if (!shouldWrapExpression(expression.node)){
+					return
+				}
+
+				if (isEventPropName(attributeName.name)){
+					// Wrap dynamic event handlers so the actual function is resolved at
+					// call time rather than at bind time.
+					//
+					// `onClick={stateApi().onClick}`
+					// → `onClick={(...args) => { const _fn = stateApi().onClick; _fn?.(...args) }}`
+					//
+					// This ensures that when the state machine produces a new handler
+					// object (e.g. after a state transition), the DOM listener always
+					// delegates to the freshest function reference.
+					const argsId = t.identifier('args')
+					const fnId = t.identifier('_fn')
+					const wrapped = t.arrowFunctionExpression([t.restElement(argsId)], t.blockStatement([
+						t.variableDeclaration('const', [
+							t.variableDeclarator(fnId, expression.node),
+						]),
+						t.expressionStatement(t.optionalCallExpression(fnId, [t.spreadElement(t.identifier('args'))], true)),
+					]))
+					expression.replaceWith(wrapped)
 					return
 				}
 
