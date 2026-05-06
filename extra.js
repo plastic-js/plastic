@@ -63,6 +63,14 @@ const createAsync = (service)=> {
 			})
 	}
 
+	const cancel = ()=> {
+		if (!isLoading()){
+			return
+		}
+		latestRunId++
+		isLoading(false)
+	}
+
 	// Default behavior: trigger once on creation for immediate data fetch.
 	run().catch(()=> {})
 
@@ -71,6 +79,7 @@ const createAsync = (service)=> {
 		data,
 		error,
 		run,
+		cancel,
 	}
 }
 
