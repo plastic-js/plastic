@@ -328,6 +328,29 @@ const createReactiveChildNode = (reactiveValue)=> {
 		}
 	})
 
+	// The fragment is drained the moment it's appended into the parent, so the
+	// start/end markers and mountedNodes become free-standing children of that
+	// parent. Without this cleanup, disposing the owner stops the binding effect
+	// but leaves the DOM nodes behind (visible as the fragment-root disposer
+	// regression). Only register if we're inside an owner/computation scope —
+	// some standalone render helpers materialize without one.
+	if (currentOwner || getCurrentComputation()){
+		registerCleanup(()=> {
+			mountedNodes.forEach((node)=> {
+				if (node.parentNode){
+					node.parentNode.removeChild(node)
+				}
+			})
+			mountedNodes = []
+			if (start.parentNode){
+				start.parentNode.removeChild(start)
+			}
+			if (end.parentNode){
+				end.parentNode.removeChild(end)
+			}
+		})
+	}
+
 	return fragment
 }
 
