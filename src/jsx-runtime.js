@@ -1,5 +1,5 @@
 import {
-	createComputed, createSignal, createTree, effect, isComputed, isSignal, isTree, runUntracked, toRaw,
+	batch, createComputed, createSignal, createTree, effect, isComputed, isSignal, isTree, runUntracked, toRaw,
 } from './reactivity.js'
 import {
 	flattenChildren, isEventProp, normalizeTextNodeValue, toClassMap, toClassTokens,
@@ -742,6 +742,7 @@ const {
 	renderInOwner,
 	getCurrentOwner,
 	registerCleanup,
+	batch,
 })
 
 // Thin runtime helper for <Dynamic component={tag} ...props />.
