@@ -1,4 +1,4 @@
-import { createSignal } from './reactivity.js'
+import { createSignal, runUntracked } from './reactivity.js'
 import { getCurrentComputation, setCurrentComputation } from './computation-context.js'
 
 const createControlFlow = ({
@@ -35,6 +35,14 @@ const createControlFlow = ({
 			const owner = createOwner(hostOwner)
 			const prevComp = getCurrentComputation()
 			setCurrentComputation(null)
+			// NOTE: unlike materializeComponentDescriptor / Loop's renderRow, we do
+			// NOT wrap these in runUntracked. getContent reads tracking signals
+			// (e.g. the condition for Either/Match) AND invokes lazy branch
+			// factories that materialize JSX in the same call. Detaching activeSub
+			// here would silence the condition subscription. The auto-parent-link
+			// pattern that bites Loop's reused rows is harmless here because
+			// disposeOwner(prevOwner) above pre-emptively severs the old branch's
+			// effects before each re-run, so purgeDeps has nothing stale to walk.
 			const result = runWithOwner(owner, getContent)
 			const node = renderInOwner(owner, result ?? null)
 			setCurrentComputation(prevComp)
@@ -179,14 +187,18 @@ const createControlFlow = ({
 			const indexSignal = createSignal(indexValue)
 			const prevComp = getCurrentComputation()
 			setCurrentComputation(null)
-			const result = runWithOwner(owner, ()=> {
+			// runUntracked mirrors materializeComponentDescriptor: the row's binding
+			// effects belong to its own owner, so they must not auto-link as deps of
+			// the surrounding Loop binding effect. Otherwise Loop's purgeDeps on re-run
+			// would unwatch them and sever their signal subscriptions.
+			const result = runUntracked(()=> runWithOwner(owner, ()=> {
 				if (typeof children !== 'function'){
 					return null
 				}
 
 				return children(item, indexSignal)
-			})
-			const node = renderInOwner(owner, result)
+			}))
+			const node = runUntracked(()=> renderInOwner(owner, result))
 			setCurrentComputation(prevComp)
 			const nodes = node instanceof DocumentFragment ? [...node.childNodes] : [node]
 
