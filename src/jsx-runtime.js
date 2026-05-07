@@ -10,6 +10,7 @@ import { createControlFlow } from './control-flow.js'
 const Fragment = Symbol('Fragment')
 const OWNER = Symbol('owner')
 const COMPONENT_DESCRIPTOR = Symbol('component-descriptor')
+const PENDING_DESCRIPTORS = Symbol('pending-descriptors')
 
 // ============ Owner & Lifecycle Management ============
 // Global context for effect scoping and cleanup tracking
@@ -716,11 +717,18 @@ const node2Element = (node)=> {
 		return document.createTextNode(String(node))
 	}
 	if (node instanceof HTMLElement || node instanceof Text || node instanceof Comment || node instanceof DocumentFragment){
+		flushPendingDescriptors(node)
 		return node
 	}
 	if (Array.isArray(node)){
 		const fragment = document.createDocumentFragment()
 		appendChildren(fragment, node)
+		// The fragment is about to be drained into a real parent (via
+		// insertBefore/appendChild). Once drained, its PENDING_DESCRIPTORS list
+		// is unreachable — the placeholders end up in a parent that never knew
+		// about them. Flush before returning so deferred descriptors materialize
+		// while we still hold the fragment.
+		flushPendingDescriptors(fragment)
 		return fragment
 	}
 	return createPlaceholder()
@@ -728,9 +736,56 @@ const node2Element = (node)=> {
 
 const materializeNode = node=> node2Element(node)
 
+// Walk an Element subtree and materialize any component descriptors that were
+// deferred by appendChild during eager native-tag construction. Materialization
+// happens with the *current* owner active, so when this is invoked from inside
+// a component's renderInOwner pass, deferred children correctly chain their
+// owner under that component (e.g. <Provider><div><Label/></div></Provider> —
+// Label's owner.parent becomes the Provider's owner, and useContext walks find
+// the Provider value).
+const flushPendingDescriptors = (root)=> {
+	if (!(root instanceof Element) && !(root instanceof DocumentFragment)){
+		return
+	}
+	const stack = [root]
+	while (stack.length){
+		const node = stack.pop()
+		const pending = node[PENDING_DESCRIPTORS]
+		if (pending){
+			node[PENDING_DESCRIPTORS] = undefined
+			pending.forEach(({ placeholder, descriptor })=> {
+				if (!placeholder.parentNode){
+					return
+				}
+				const materialized = node2Element(descriptor)
+				placeholder.parentNode.replaceChild(materialized, placeholder)
+			})
+		}
+		for (const child of node.childNodes){
+			if (child instanceof Element){
+				stack.push(child)
+			}
+		}
+	}
+}
+
 // Ignore empty JSX children and append everything else after normalization.
 const appendChild = (parent, child)=> {
 	if (child == null){
+		return parent
+	}
+
+	// Defer component-descriptor children until the surrounding component owner
+	// is active. JS evaluates h() arguments eagerly, so without this the inner
+	// component would materialize under the *outer* component's owner, missing
+	// any context that the wrapping component sets in its body. Only defer when
+	// we're already inside a component scope (currentOwner set) — direct h()
+	// usage at the top of a script expects synchronous materialization.
+	if (isComponentDescriptor(child) && currentOwner != null && (parent instanceof Element || parent instanceof DocumentFragment)){
+		const placeholder = document.createComment('pending')
+		parent.appendChild(placeholder)
+		const list = parent[PENDING_DESCRIPTORS] ?? (parent[PENDING_DESCRIPTORS] = [])
+		list.push({ placeholder, descriptor: child })
 		return parent
 	}
 
