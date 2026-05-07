@@ -14,7 +14,7 @@ export default defineConfig({
 						'@babel/preset-react',
 						{
 							runtime: 'automatic',
-							importSource: 'jsx',
+							importSource: 'plastic',
 						},
 					],
 				],
@@ -24,7 +24,8 @@ export default defineConfig({
 	],
 	resolve: {
 		alias: {
-			'jsx/jsx-runtime': path.resolve(__dirname, './src/jsx-runtime.js'),
+			'plastic/jsx-runtime': path.resolve(__dirname, './src/jsx-runtime.js'),
+			plastic: path.resolve(__dirname, './src/index.js'),
 		},
 	},
 	build: {
@@ -33,5 +34,15 @@ export default defineConfig({
 	server: {
 		port: 3000,
 		open: true,
+	},
+	test: {
+		// ark-solid and zag-solid are Solid.js reference ports; their tsconfigs
+		// extend non-existent monorepo paths and they require a Solid runtime
+		// the Plastic test suite does not provide.
+		exclude: ['**/node_modules/**', '**/dist/**', 'ark-solid/**', 'zag-solid/**'],
+		// Stubs IntersectionObserver/ResizeObserver/CSS.escape/Element.scrollTo
+		// for jsdom so zag-js machines (carousel, drawer, popper, select,
+		// radio-group, etc.) can wire up without crashing.
+		setupFiles: ['./test/setup.js'],
 	},
 })

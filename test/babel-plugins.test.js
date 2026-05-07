@@ -31,7 +31,7 @@ describe('babel plugin: Either slot lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformControlFlowPlugin],
@@ -63,7 +63,7 @@ describe('babel plugin: Context.Provider lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformControlFlowPlugin],
@@ -89,7 +89,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -112,7 +112,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -135,7 +135,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -160,7 +160,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -190,7 +190,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -216,7 +216,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -240,7 +240,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -263,7 +263,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -286,7 +286,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -310,7 +310,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -333,7 +333,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -356,7 +356,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -379,7 +379,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -402,7 +402,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -425,7 +425,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -448,7 +448,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -473,7 +473,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -496,7 +496,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -519,7 +519,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -542,7 +542,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -565,7 +565,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -588,7 +588,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -611,7 +611,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -634,7 +634,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -657,7 +657,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -680,7 +680,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -703,7 +703,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -725,7 +725,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -755,7 +755,7 @@ describe('babel plugin: Match slot lazy transform', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformControlFlowPlugin],
@@ -1172,7 +1172,7 @@ describe('babel plugin: reactive spread', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -1196,7 +1196,7 @@ describe('babel plugin: reactive spread', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
@@ -1220,7 +1220,7 @@ describe('babel plugin: reactive spread', ()=> {
 				'@babel/preset-react',
 				{
 					runtime: 'automatic',
-					importSource: 'jsx',
+					importSource: 'plastic',
 				},
 			]],
 			plugins: [transformReactivePlugin],
