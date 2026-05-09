@@ -25,6 +25,7 @@ export default [
 			'react/prop-types': 0,
 			'react/button-has-type': 0,
 			'react/no-multi-comp': [2, { ignoreStateless: true }],
+			'treact/jsx-filename-extension': [2, { extensions: ['.js'] }],
 			// framework-specific  
 			'react/destructuring-assignment': [2, 'always', { ignoreClassFields: true }],
 			'@stylistic/js/no-extra-parens': [2, 'all', { ignoreJSX: 'all' }],
