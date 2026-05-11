@@ -716,7 +716,7 @@ const node2Element = (node)=> {
 	if (typeof node === 'string' || typeof node === 'number'){
 		return document.createTextNode(String(node))
 	}
-	if (node instanceof HTMLElement || node instanceof Text || node instanceof Comment || node instanceof DocumentFragment){
+	if (node instanceof Node){
 		flushPendingDescriptors(node)
 		return node
 	}

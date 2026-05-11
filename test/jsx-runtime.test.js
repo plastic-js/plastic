@@ -78,6 +78,20 @@ describe('jsx runtime static rendering', ()=> {
 		expect(button.getAttribute('onClick')).toBeNull()
 	})
 
+	it('keeps SVG nodes when appending native tag children', ()=> {
+		const element = h('div', null, h('svg', { viewBox: '0 0 10 10' }, h('path', { d: 'M0 0 L10 10' })))
+
+		const svg = element.querySelector('svg')
+		const path = element.querySelector('path')
+
+		expect(svg).toBeInstanceOf(SVGSVGElement)
+		expect(svg?.getAttribute('viewBox')).toBe('0 0 10 10')
+		expect(path).toBeInstanceOf(Element)
+		expect(path?.namespaceURI).toBe('http://www.w3.org/2000/svg')
+		expect(path?.localName).toBe('path')
+		expect(path?.getAttribute('d')).toBe('M0 0 L10 10')
+	})
+
 	it('invokes function ref after mount with the DOM element', ()=> {
 		const ref = vi.fn()
 		const Component = ()=> h('div', {
