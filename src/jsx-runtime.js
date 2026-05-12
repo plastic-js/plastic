@@ -6,6 +6,7 @@ import {
 } from './utils.js'
 import { getCurrentComputation, setCurrentComputation } from './computation-context.js'
 import { createControlFlow } from './control-flow.js'
+import { isMergedProps, mergeProps } from './merge-props.js'
 
 const Fragment = Symbol('Fragment')
 const OWNER = Symbol('owner')
@@ -111,10 +112,16 @@ const createBindingEffect = (runner)=> {
 		// Set up computation context for onCleanup within the effect
 		const prevComp = getCurrentComputation()
 		setCurrentComputation({ cleanups: local })
+		// Restore the owner captured at creation time so that:
+		// 1. appendChild defers component-descriptor children (requires currentOwner != null)
+		// 2. createOwner() chains new owners under the correct parent on re-fires
+		const prevOwner = currentOwner
+		currentOwner = owner
 		try {
 			runner()
 		} finally {
 			setCurrentComputation(prevComp)
+			currentOwner = prevOwner
 		}
 	})
 
@@ -280,10 +287,17 @@ const materializeComponentDescriptor = (descriptor)=> {
 	}
 
 	const owner = createOwner(currentOwner)
-	const componentProps = {
-		...descriptor.props,
-		children: descriptor.children.length === 1 ? descriptor.children[0] : descriptor.children,
+	let componentProps = descriptor.props ?? {}
+
+	// Legacy `h(Comp, props, ...children)` carries variadic children alongside
+	// props. Compiled JSX always packs children into the proxy itself, leaving
+	// descriptor.children empty. Layer any extra variadic children on top via
+	// mergeProps so the proxy contract holds for both call shapes.
+	if (descriptor.children && descriptor.children.length > 0){
+		const kids = descriptor.children.length === 1 ? descriptor.children[0] : descriptor.children
+		componentProps = mergeProps(componentProps, { children: kids })
 	}
+
 	const result = runUntracked(()=> runWithOwner(owner, ()=> descriptor.tag(componentProps)))
 	const normalized = runUntracked(()=> renderInOwner(owner, result))
 
@@ -376,19 +390,22 @@ const applyClassNameMap = (element, classNameMap)=> {
 	})
 }
 
+// Apply a className value to an element. Always reconciles against the
+// element's current classList so re-runs (e.g. via an enclosing binding
+// effect) drop tokens that disappeared from the new value.
 const applyClassProp = (element, value)=> {
 	if (isReactive(value)){
 		createBindingEffect(()=> {
-			const expectedClass = toClassMap(resolveReactiveValue(value))
-			const actualClass = new Set(element.classList)
-			const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
-			const combinedClassMap = new Map([...expectedClass, ...shouldRemove.map(className=> [className, false])])
-			applyClassNameMap(element, combinedClassMap)
+			applyClassProp(element, resolveReactiveValue(value))
 		})
 		return
 	}
 
-	applyClassNameMap(element, toClassMap(value))
+	const expectedClass = toClassMap(value)
+	const actualClass = new Set(element.classList)
+	const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
+	const combinedClassMap = new Map([...expectedClass, ...shouldRemove.map(className=> [className, false])])
+	applyClassNameMap(element, combinedClassMap)
 }
 const applyStyleObject = (element, styles)=> {
 	Object.entries(styles).forEach(([property, value])=> {
@@ -413,24 +430,19 @@ const clearStyleKey = (element, key)=> {
 	}
 }
 
+// Apply a style value to an element. Always wipes `cssText` first so a
+// re-run with fewer keys (e.g. an object source losing properties, or the
+// value switching to null) doesn't leave stale declarations behind.
 const applyStyleProp = (element, value)=> {
 	if (isReactive(value)){
-		let prevKeys = new Set()
 		createBindingEffect(()=> {
-			const resolved = resolveReactiveValue(value)
-			if (typeof resolved === 'string' || resolved == null){
-				element.style.cssText = resolved ?? ''
-				prevKeys = new Set()
-			} else if (typeof resolved === 'object'){
-				prevKeys.forEach((key)=> {
-					if (!(key in resolved)){
-						clearStyleKey(element, key)
-					}
-				})
-				applyStyleObject(element, resolved)
-				prevKeys = new Set(Object.keys(resolved))
-			}
+			applyStyleProp(element, resolveReactiveValue(value))
 		})
+		return
+	}
+
+	if (value == null || value === false){
+		element.style.cssText = ''
 		return
 	}
 
@@ -439,7 +451,8 @@ const applyStyleProp = (element, value)=> {
 		return
 	}
 
-	if (value && typeof value === 'object'){
+	if (typeof value === 'object'){
+		element.style.cssText = ''
 		applyStyleObject(element, value)
 	}
 }
@@ -540,161 +553,115 @@ const applyRefProp = (element, ref)=> {
 	}
 }
 
-// Counterpart of the babel-plugin-transform-jsx-reactive spread rewrite.
-// `<div {...expr} />` is compiled to a `__rspread__N: () => expr` prop, which
-// `applyProps` forwards here so the source object is re-evaluated reactively.
-const REACTIVE_SPREAD_PREFIX = '__rspread__'
-const isReactiveSpreadKey = key=> typeof key === 'string' && key.startsWith(REACTIVE_SPREAD_PREFIX)
-
-const applyReactiveSpread = (element, thunk)=> {
-	let prevKeys = new Set()
-	const attachedEvents = new Map()
-
-	const detachEvent = (eventName)=> {
-		const handler = attachedEvents.get(eventName)
-		if (handler){
-			element.removeEventListener(eventName, handler)
-			attachedEvents.delete(eventName)
+const disposeBindings = (bindings)=> {
+	;[...bindings].reverse().forEach((dispose)=> {
+		if (typeof dispose === 'function'){
+			dispose()
 		}
-	}
-
-	if (currentOwner || getCurrentComputation()){
-		registerCleanup(()=> {
-			attachedEvents.forEach((handler, eventName)=> {
-				element.removeEventListener(eventName, handler)
-			})
-			attachedEvents.clear()
-		})
-	}
-
-	createBindingEffect(()=> {
-		const resolved = resolveReactiveValue(thunk)
-		const next = (resolved && typeof resolved === 'object') ? resolved : {}
-		const nextKeys = new Set(Object.keys(next))
-
-		// Drop attributes/handlers present last run but absent this run.
-		prevKeys.forEach((key)=> {
-			if (nextKeys.has(key)){
-				return
-			}
-			if (key === 'children' || key === 'ref' || key === 'classList'){
-				return
-			}
-			if (isEventProp(key)){
-				detachEvent(key.slice(2).toLowerCase())
-				return
-			}
-			if (key === 'className' || key === 'class'){
-				element.removeAttribute('class')
-				return
-			}
-			if (key === 'style'){
-				element.removeAttribute('style')
-				return
-			}
-			const domKey = JSX_PROP_MAP[key] ?? key
-			clearDomProp(element, domKey)
-		})
-
-		// Apply the current snapshot. Values inside the spread are treated as
-		// plain (non-reactive) — the outer effect already re-runs on changes.
-		Object.entries(next).forEach(([key, value])=> {
-			if (key === 'children' || key === 'ref' || key === 'classList'){
-				return
-			}
-
-			if (isEventProp(key)){
-				const eventName = key.slice(2).toLowerCase()
-				detachEvent(eventName)
-				if (typeof value === 'function' && isSupportedEvent(element, eventName)){
-					element.addEventListener(eventName, value)
-					attachedEvents.set(eventName, value)
-				}
-				return
-			}
-
-			if (key === 'className' || key === 'class'){
-				if (value == null || value === false || value === ''){
-					element.removeAttribute('class')
-				} else {
-					element.setAttribute('class', String(value))
-				}
-				return
-			}
-
-			if (key === 'style'){
-				if (value == null || value === false){
-					element.removeAttribute('style')
-					return
-				}
-				if (typeof value === 'string'){
-					element.style.cssText = value
-					return
-				}
-				if (typeof value === 'object'){
-					element.style.cssText = ''
-					applyStyleObject(element, value)
-				}
-				return
-			}
-
-			const domKey = JSX_PROP_MAP[key] ?? key
-			setDomProp(element, domKey, value)
-		})
-
-		prevKeys = nextKeys
 	})
+	bindings.length = 0
 }
 
-const applyProps = (element, props = {})=> {
-	const entries = Object.entries(props)
-	entries.forEach(([key, value])=> {
-		if (key === 'children'){
-			return
-		}
-
-		if (isReactiveSpreadKey(key)){
-			applyReactiveSpread(element, value)
-			return
-		}
-
-		if (key === 'classList'){
-			throw new Error('classList prop is not supported. Use className instead.')
-		}
-
-		if (key === 'className'){
+// Bind a single non-event, non-special prop key to the DOM element. Each
+// individual prop runs inside its own binding effect so a signal change in
+// one prop's getter only re-writes that one attribute. For plain (non-proxy)
+// props the inner effect runs once with no dependencies and is essentially
+// free. The value is resolved through `resolveReactiveValue` so signals and
+// zero-arg accessor thunks (used widely by ark-plastic / zag adapters) are
+// unwrapped before being applied to the DOM.
+const bindReactiveProp = (element, props, key)=> {
+	const stop = createBindingEffect(()=> {
+		const value = resolveReactiveValue(props[key])
+		if (key === 'className' || key === 'class'){
 			applyClassProp(element, value)
 			return
 		}
-
-		if (isEventProp(key)){
-			if (typeof value === 'function'){
-				const eventName = key.slice(2).toLowerCase()
-				if (isSupportedEvent(element, eventName)){
-					element.addEventListener(eventName, value)
-					// Register cleanup to remove event listener if in owner context
-					if (currentOwner || getCurrentComputation()){
-						registerCleanup(()=> {
-							element.removeEventListener(eventName, value)
-						})
-					}
-				}
-			}
-			return
-		}
-
 		if (key === 'style'){
 			applyStyleProp(element, value)
 			return
 		}
+		const domKey = JSX_PROP_MAP[key] ?? key
+		setDomProp(element, domKey, value)
+	})
 
-		if (key === 'ref'){
-			applyRefProp(element, value)
+	return ()=> {
+		stop?.()
+		if (key === 'className' || key === 'class'){
+			element.removeAttribute('class')
 			return
 		}
-
+		if (key === 'style'){
+			element.removeAttribute('style')
+			return
+		}
 		const domKey = JSX_PROP_MAP[key] ?? key
-		applyCommonAttribute(element, domKey, value)
+		clearDomProp(element, domKey)
+	}
+}
+
+// Attach a single listener that resolves the current handler from `props` at
+// dispatch time. This makes handlers reactive without re-attaching listeners:
+// when a parent's signal changes the handler reference, the next event read
+// sees the new function via the proxy.
+const bindReactiveEvent = (element, props, key)=> {
+	const eventName = key.slice(2).toLowerCase()
+	if (!isSupportedEvent(element, eventName)){
+		return ()=> {}
+	}
+	const listener = (...args)=> {
+		const handler = props[key]
+		if (typeof handler === 'function'){
+			handler(...args)
+		}
+	}
+	element.addEventListener(eventName, listener)
+	if (currentOwner || getCurrentComputation()){
+		registerCleanup(()=> {
+			element.removeEventListener(eventName, listener)
+		})
+	}
+
+	return ()=> {
+		element.removeEventListener(eventName, listener)
+	}
+}
+
+// Apply a props object (plain object or mergeProps proxy) to a DOM element.
+// Each prop gets its own binding effect so a change to one signal only
+// re-writes that one attribute. The enclosing binding effect tracks
+// `Reflect.ownKeys(props)`, so when a dynamic spread source adds or removes
+// keys later we tear down the previous bindings and rebuild them from the
+// current key set.
+const applyProps = (element, props = {})=> {
+	createBindingEffect(()=> {
+		const bindings = []
+		registerCleanup(()=> {
+			disposeBindings(bindings)
+		})
+
+		for (const key of Reflect.ownKeys(props)){
+			if (typeof key === 'symbol' || key === 'children' || key === 'key'){
+				continue
+			}
+			if (key === 'classList'){
+				throw new Error('classList prop is not supported. Use className instead.')
+			}
+			if (key === 'ref'){
+				const ref = props[key]
+				applyRefProp(element, ref)
+				bindings.push(()=> {
+					if (typeof ref === 'function'){
+						ref(null)
+					}
+				})
+				continue
+			}
+			if (isEventProp(key)){
+				bindings.push(bindReactiveEvent(element, props, key))
+				continue
+			}
+			bindings.push(bindReactiveProp(element, props, key))
+		}
 	})
 	return element
 }
@@ -836,21 +803,29 @@ const Dynamic = ({ component, ...props })=> {
 	return h(dynamicTag, props)
 }
 
+const SVG_TAGS = new Set(['svg', 'animate', 'animateMotion', 'animateTransform', 'circle', 'clipPath', 'defs', 'desc', 'ellipse', 'feBlend', 'feColorMatrix', 'feComponentTransfer', 'feComposite', 'feConvolveMatrix', 'feDiffuseLighting', 'feDisplacementMap', 'feDistantLight', 'feDropShadow', 'feFlood', 'feFuncA', 'feFuncB', 'feFuncG', 'feFuncR', 'feGaussianBlur', 'feImage', 'feMerge', 'feMergeNode', 'feMorphology', 'feOffset', 'fePointLight', 'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence', 'filter', 'foreignObject', 'g', 'image', 'line', 'linearGradient', 'marker', 'mask', 'metadata', 'mpath', 'path', 'pattern', 'polygon', 'polyline', 'radialGradient', 'rect', 'set', 'stop', 'switch', 'symbol', 'text', 'textPath', 'tspan', 'use', 'view'])
+
 const h = (tag, props, ...children)=> {
 	const nextProps = props || {}
-	const propChildren = nextProps.children ?? []
-	const normalizedPropChildren = Array.isArray(propChildren) ? propChildren : [propChildren]
-	const mergedChildren = [...normalizedPropChildren, ...children]
 
 	if (tag === Fragment){
 		// Fragments produce a DocumentFragment so no wrapper element is introduced.
+		const propChildren = nextProps.children ?? []
+		const normalizedPropChildren = Array.isArray(propChildren) ? propChildren : [propChildren]
+		const mergedChildren = [...normalizedPropChildren, ...children]
 		const fragment = document.createDocumentFragment()
 		appendChildren(fragment, mergedChildren)
 		return fragment
 	}
 
 	if (typeof tag === 'function'){
-		return createComponentDescriptor(tag, nextProps, mergedChildren)
+		// Compiled JSX always packs children into the props proxy and passes no
+		// variadic children; preserve the proxy as-is so component bodies read
+		// `props.children` reactively. Legacy handwritten `h(Comp, props, ...kids)`
+		// callers pass kids separately — forward them to the descriptor so
+		// materializeComponentDescriptor can layer them into the proxy via
+		// `mergeProps`.
+		return createComponentDescriptor(tag, nextProps, children)
 	}
 
 	if (typeof tag !== 'string'){
@@ -858,15 +833,24 @@ const h = (tag, props, ...children)=> {
 	}
 
 	// Native tags create real DOM elements directly without a virtual DOM layer.
-	const SVG_TAGS = new Set(['svg', 'animate', 'animateMotion', 'animateTransform', 'circle', 'clipPath', 'defs', 'desc', 'ellipse', 'feBlend', 'feColorMatrix', 'feComponentTransfer', 'feComposite', 'feConvolveMatrix', 'feDiffuseLighting', 'feDisplacementMap', 'feDistantLight', 'feDropShadow', 'feFlood', 'feFuncA', 'feFuncB', 'feFuncG', 'feFuncR', 'feGaussianBlur', 'feImage', 'feMerge', 'feMergeNode', 'feMorphology', 'feOffset', 'fePointLight', 'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence', 'filter', 'foreignObject', 'g', 'image', 'line', 'linearGradient', 'marker', 'mask', 'metadata', 'mpath', 'path', 'pattern', 'polygon', 'polyline', 'radialGradient', 'rect', 'set', 'stop', 'switch', 'symbol', 'text', 'textPath', 'tspan', 'use', 'view'])
 	const element = SVG_TAGS.has(tag) ? document.createElementNS('http://www.w3.org/2000/svg', tag) : document.createElement(tag)
 	applyProps(element, nextProps)
+
+	const propChildren = nextProps.children ?? []
+	const normalizedPropChildren = Array.isArray(propChildren) ? propChildren : [propChildren]
+	const mergedChildren = [...normalizedPropChildren, ...children]
 	appendChildren(element, mergedChildren)
 	return element
 }
 
-const jsx = (tag, props, key)=> h(tag, key === undefined ? props : { ...props, key })
-const jsxs = (tag, props, key)=> h(tag, key === undefined ? props : { ...props, key })
+const jsx = (tag, props, key)=> {
+	if (key === undefined){
+		return h(tag, props)
+	}
+	// Layer key on without flattening the proxy.
+	return h(tag, mergeProps(props, { key }))
+}
+const jsxs = jsx
 
 // Render by appending the normalized root node into the target container.
 // Returns a disposer function that cleans up all effects and listeners.
@@ -959,4 +943,7 @@ export {
 	Loop,
 	Portal,
 	Dynamic,
+	// Reactive props proxy
+	isMergedProps,
+	mergeProps,
 }

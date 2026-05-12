@@ -18,6 +18,74 @@ A lightweight custom JSX runtime that works as a web front-end framework. Inspir
 - **`<Loop>` list rendering** — reconciles lists by object identity; reuses, moves, and disposes item rows with fine-grained owner tracking.
 - **Client-side routing** — `<Router>`, `<Route>`, `<Link>`, `<NavLink>`, `navigate()`, `<Outlet>`, and `useRoute()` use the History API for nested routing with params and query awareness.
 
+## Props Model and One-Way Data Flow
+
+Plastic enforces a strict one-way data flow contract: data travels **downward** from parent to child through props, and upward only through explicit callbacks or shared reactive state. A child component must never mutate its own props.
+
+### Read-Only Props Proxy
+
+When a JSX element carries any attributes or children, the Babel plugin compiles all props into a single `mergeProps(...)` call. The result is a read-only Proxy — any attempt to write a prop throws immediately:
+
+```js
+const Child = (props) => {
+    props.label = 'override'  // Error: mergeProps result is read-only
+}
+```
+
+This turns a common accidental mistake into an explicit runtime error instead of a silent data corruption.
+
+### How Reactive Props Work
+
+Dynamic attribute expressions are compiled into getter properties so that reading a prop inside a reactive binding effect automatically subscribes to its signal dependencies:
+
+```jsx
+// Source
+<MyComp foo={2} bar={state.b}>{kid}</MyComp>
+
+// Compiled
+jsx(MyComp, mergeProps({
+    foo: 2,
+    get bar() { return state.b },
+    get children() { return kid },
+}))
+```
+
+Reading `props.bar` inside an effect invokes the getter, which reads `state.b` and registers a subscription. When `state.b` changes, only the binding that reads `props.bar` re-executes — no component re-render, no diffing.
+
+### Dynamic Spread Sources
+
+Spread attributes whose value is a dynamic expression (a call, a member access, etc.) are wrapped in a thunk argument to `mergeProps` so that the spread source is re-evaluated lazily on each reactive read:
+
+```jsx
+// Source
+<MyComp {...api()} foo={2} bar={state.b} />
+
+// Compiled
+jsx(MyComp, mergeProps(
+    () => api(),
+    { foo: 2, get bar() { return state.b } },
+))
+```
+
+Signal reads inside `api()` are tracked by the same binding effect that reads the resulting prop, so changes inside `api()` automatically propagate to the DOM without any extra wiring.
+
+### `mergeProps` vs. Solid's Implementation
+
+Plastic's `mergeProps` shares the same surface API as Solid's but differs in three important ways:
+
+- **Always a Proxy.** Solid returns a plain `{}` for static plain-object sources to avoid Proxy overhead. Plastic always returns a Proxy.
+- **Thunk-based reactivity, not `createMemo`.** Solid wraps function sources in `createMemo` during initialisation so they are only re-executed when their signals change. Plastic calls the function on every property access; signal tracking still works, but there is no memoisation between reads.
+- **Special-key merging.** Plastic adds merging semantics for four key families that Solid does not have:
+
+| Key | Plastic behaviour |
+|---|---|
+| `class` / `className` | treated as one family; all string values concatenated with a space |
+| `style` | plain objects shallow-merged; strings joined with `; ` |
+| `ref` | last source wins (matches Solid) |
+| `onXxx` event handlers | last source wins (matches Solid) |
+
+`class` and `style` receive additive merging so host components can contribute tokens and styles alongside the consumer's without clobbering. `ref` and `onXxx` follow Solid's last-wins rule.
+
 ## Lifecycle Semantics
 
 - `onMount` callbacks run in **child-first** order for nested component trees.

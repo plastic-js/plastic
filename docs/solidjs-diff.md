@@ -24,6 +24,7 @@ Plastic follows the same direction as Solid.js (no Virtual DOM + fine-grained re
 
 | Area | Solid.js | Plastic Current Status | Difference |
 |---|---|---|---|
+| Props immutability | Convention-based; compiler warns in dev mode | `mergeProps` Proxy throws on write at runtime | Plastic enforces read-only props via a Proxy `set` trap; Solid relies on convention and tooling. |
 | Signal | `const [v, setV] = createSignal()` | `const v = createSignal()` | Plastic uses a single-function read/write model (`v()` read, `v(next)` write), not tuple style. |
 | Effect | `createEffect` | `createEffect` (alias exported from `createBindingEffect`) | Similar baseline effect behavior, but no full Solid scheduling toolbox (for example `batch`/`untrack`/`startTransition`). |
 | Memo/Computed | `createMemo` | `createComputed` | Different naming and ergonomics; current implementation is based on `alien-signals` computed. |
@@ -134,6 +135,89 @@ Conceptually similar, but Plastic routing is an in-house implementation and not 
 - Hook return shapes, navigation-state reads, and guard behavior should follow Plastic semantics
 - Do not assume Solid Router advanced behaviors when porting components
 
+### 5.6 Props Are Read-Only (Enforced at Runtime, Not Convention)
+
+Both Plastic and Solid.js promote one-way data flow, but they enforce it differently.
+
+**Solid.js** relies on convention and compile-time tooling. Writing to a prop silently succeeds or is caught only by linting rules.
+
+**Plastic** enforces immutability at runtime via a Proxy `set` trap in `mergeProps`:
+
+```js
+// merge-props.js
+const readOnlyTrap = () => {
+    throw new Error('mergeProps result is read-only')
+}
+// Proxy traps:  set: readOnlyTrap,  deleteProperty: readOnlyTrap
+```
+
+Any attribute-bearing JSX element passes its props through `mergeProps`, making the resulting object read-only for the component that receives it:
+
+```js
+// Parent
+<Child label={state.label} count={42} />
+
+// Inside Child — both throw immediately
+props.label = 'hacked'   // Error: mergeProps result is read-only
+props.count = 0          // Error: mergeProps result is read-only
+```
+
+**Correct pattern — communicate upward via callback, never by writing props:**
+
+```js
+// Parent
+<Child label={state.label} onChange={(next) => { state.label = next }} />
+
+// Inside Child
+props.onChange('new value')  // correct: calls the callback
+```
+
+**Scope of protection:**
+
+- Elements with any attributes or children → protected (go through `mergeProps`)
+- Completely empty elements like `<Tag />` → receive a plain `{}` and are not protected
+
+**Why this matters for component library development:**
+
+A component that accidentally writes a prop produces a hard failure immediately at the write site rather than silent UI divergence that is difficult to trace. This is especially relevant when adapting Solid component patterns where prop mutation is sometimes used as a shortcut.
+
+### 5.7 `mergeProps` Is Implemented but Behaves Differently from Solid
+
+Both Plastic and Solid.js expose a `mergeProps` utility, but their implementations differ in several meaningful ways.
+
+#### Return type is always a Proxy
+
+Solid conditionally returns a plain `{}` (the *descriptor path*) when all sources are static plain objects, avoiding Proxy overhead entirely. Plastic's `mergeProps` always returns a `new Proxy` regardless of source types.
+
+#### Function sources — thunk vs. `createMemo`
+
+Solid wraps each function source in `createMemo` during an initial scan phase. The memoised computation is only re-executed when its underlying signal changes.
+
+Plastic treats function sources as *thunks* and calls them on every property access. Signal reads inside a thunk are still tracked by the enclosing effect, but the function is re-invoked unconditionally on each read.
+
+#### Special-key merging (Plastic only)
+
+Plastic's `mergeProps` applies custom merging semantics for several key families that Solid does not have — Solid always applies last-wins:
+
+| Key | Plastic `mergeProps` | Solid `mergeProps` |
+|---|---|---|
+| `class` / `className` | treated as one family; string values **concatenated** with a space | last non-`undefined` value wins |
+| `style` | plain objects are **shallow-merged**; strings are **joined with `; `** | last non-`undefined` value wins |
+| `ref` | last value wins | last value wins |
+| `onXxx` event handlers | last value wins | last value wins |
+
+`class` and `style` receive special merging so a host component can contribute its own tokens and styles alongside the consumer's without either side clobbering the other. `ref` and `onXxx` follow Solid's last-wins rule.
+
+#### Read-only enforcement
+
+Plastic's `set` and `deleteProperty` traps throw an `Error` unconditionally. Solid returns `false`, which raises a `TypeError` only in strict mode and silently fails in sloppy mode.
+
+#### Merged-object identity
+
+Plastic uses a `WeakSet` and an exported `isMergedProps(value)` helper to identify merged results. Solid marks merged results with a `$PROXY` symbol, which is shared with the Store system so that nested reactive proxies are automatically recognised without extra bookkeeping.
+
+---
+
 ## 6. Common Solid Capabilities Not Yet Implemented (Avoid for Now)
 
 If any of the following is treated as a hard requirement in component library architecture, rework risk is high:
@@ -142,7 +226,7 @@ If any of the following is treated as a hard requirement in component library ar
 - Suspense / `createResource`
 - Error Boundary
 - Scheduling and concurrency helpers (for example `batch`, `untrack`, `startTransition`)
-- Common Solid utility APIs (for example `splitProps`, `mergeProps`, `children`, `createSelector`, `createUniqueId`)
+- Common Solid utility APIs (for example `splitProps`, `children`, `createSelector`, `createUniqueId`)
 
 Recommendation: in phase one, only depend on the validated minimal API set and avoid early abstraction around missing features.
 

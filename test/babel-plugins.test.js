@@ -6,8 +6,12 @@ import {
 import { transformSync } from '@babel/core'
 import {
 	Dynamic,
+	Fragment,
 	createTree,
 	h,
+	isMergedProps,
+	jsx,
+	mergeProps,
 	renderApp,
 } from '../src/jsx-runtime.js'
 import transformReactivePlugin from '../build/babel-plugin-transform-jsx-reactive.js'
@@ -123,7 +127,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 		expect(code).toContain('children: () => state.count')
 	})
 
-	it('wraps intrinsic DOM attributes when their expression is dynamic', ()=> {
+	it('emits dynamic intrinsic DOM attributes as getter properties on the mergeProps payload', ()=> {
 		const source = `
 			const view = <div style={{ color: state.color }} title={state.title} />
 		`
@@ -143,12 +147,13 @@ describe('babel plugin: ternary lazy transform', ()=> {
 
 		const code = transformed?.code ?? ''
 
-		expect(code).toContain('style: () => ({')
+		expect(code).toContain('get style()')
 		expect(code).toContain('color: state.color')
-		expect(code).toContain('title: () => state.title')
+		expect(code).toContain('get title()')
+		expect(code).toContain('return state.title')
 	})
 
-	it('wraps dynamic component props and wraps dynamic event handlers in indirection closure', ()=> {
+	it('emits dynamic component props and event handlers as getters; runtime resolves them at access', ()=> {
 		const source = `
 			const view = <><Button label={state.label} /><button onClick={handlers.save} disabled={locked} /></>
 		`
@@ -168,17 +173,18 @@ describe('babel plugin: ternary lazy transform', ()=> {
 
 		const code = transformed?.code ?? ''
 
-		// component prop with dynamic MemberExpression — should be wrapped
-		expect(code).toContain('label: () => state.label')
-		// intrinsic event handler with dynamic MemberExpression — wrapped in indirection closure
-		expect(code).toContain('const _fn = handlers.save')
-		expect(code).toContain('_fn?.')
-		// static identifier on intrinsic element — must not be wrapped
+		// component prop with dynamic MemberExpression — getter on mergeProps
+		expect(code).toContain('get label()')
+		expect(code).toContain('return state.label')
+		// dynamic event handler — also a getter; runtime fetches it per-dispatch
+		expect(code).toContain('get onClick()')
+		expect(code).toContain('return handlers.save')
+		// static identifier on intrinsic element — emitted as plain property
 		expect(code).toContain('disabled: locked')
-		expect(code).not.toContain('disabled: () => locked')
+		expect(code).not.toContain('get disabled()')
 	})
 
-	it('wraps dynamic intrinsic event handler expressions in indirection closure', ()=> {
+	it('wraps dynamic intrinsic event handler expressions as getters', ()=> {
 		const source = `
 			const view = <button onClick={flag() ? () => alert("A") : () => alert("B")}>Toggle</button>
 		`
@@ -198,10 +204,8 @@ describe('babel plugin: ternary lazy transform', ()=> {
 
 		const code = transformed?.code ?? ''
 
-		// dynamic conditional event handler — wrapped so function resolves at call time
-		expect(code).toContain('const _fn = flag() ?')
-		expect(code).toContain('_fn?.')
-		expect(code).not.toContain('onClick: () => flag() ?')
+		expect(code).toContain('get onClick()')
+		expect(code).toContain('return flag() ?')
 	})
 
 	it('does not wrap arrow-function or function-expression children', ()=> {
@@ -344,7 +348,7 @@ describe('babel plugin: ternary lazy transform', ()=> {
 		expect(code).toContain('() => t`Hello`')
 	})
 
-	it('wraps intrinsic attribute whose object value contains a spread element', ()=> {
+	it('wraps intrinsic attribute whose object value contains a spread element as a getter', ()=> {
 		const source = `
 			const view = <div style={{...styles}} />
 		`
@@ -364,7 +368,8 @@ describe('babel plugin: ternary lazy transform', ()=> {
 
 		const code = transformed?.code ?? ''
 
-		expect(code).toContain('style: () => ({')
+		expect(code).toContain('get style()')
+		expect(code).toContain('...styles')
 	})
 
 	it('wraps a nested JSX element used as a child expression', ()=> {
@@ -770,34 +775,39 @@ describe('babel plugin: Match slot lazy transform', ()=> {
 	})
 })
 
+// The reactive plugin emits `jsx(...)` / `mergeProps(...)` calls. Compile
+// the source in script mode so the plugin uses bare identifiers (no ESM
+// imports inside the `new Function` body), then provide those identifiers
+// as Function args.
+const compileComponent = (source)=> {
+	const transformed = transformSync(source, {
+		configFile: false,
+		babelrc: false,
+		sourceType: 'script',
+		presets: [[
+			'@babel/preset-react',
+			{
+				runtime: 'classic',
+				pragma: 'h',
+				pragmaFrag: 'Fragment',
+			},
+		]],
+		plugins: [transformReactivePlugin],
+	})
+
+	const code = transformed?.code ?? ''
+	const factory = new Function('h', 'Fragment', 'jsx', 'mergeProps', 'Dynamic', `${code}; return App;`)
+
+	return {
+		code,
+		App: factory(h, Fragment, jsx, mergeProps, Dynamic),
+	}
+}
+
 describe('babel plugin: createTree reactivity in compiled components', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
 	})
-
-	const compileComponent = (source)=> {
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'classic',
-					pragma: 'h',
-					pragmaFrag: 'Fragment',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-
-		const code = transformed?.code ?? ''
-		const factory = new Function('h', 'Fragment', `${code}; return App;`)
-
-		return {
-			code,
-			App: factory(h, Symbol('Fragment')),
-		}
-	}
 
 	it('updates child text when createTree fields change in a compiled component', ()=> {
 		const { code, App } = compileComponent(`
@@ -842,8 +852,10 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 
 		const input = container.querySelector('input')
 
-		expect(code).toContain('title: () => state.meta.title')
-		expect(code).toContain('value: () => state.form.value')
+		expect(code).toContain('get title()')
+		expect(code).toContain('return state.meta.title')
+		expect(code).toContain('get value()')
+		expect(code).toContain('return state.form.value')
 		expect(input.getAttribute('title')).toBe('draft')
 		expect(input.value).toBe('A')
 
@@ -921,8 +933,9 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 
 		const paragraph = container.querySelector('p')
 
-		expect(code).toContain('title: () => state.user?.name ?? \'anonymous\'')
-		expect(code).toContain(', () => state.user?.name ?? \'anonymous\'')
+		expect(code).toContain('get title()')
+		expect(code).toContain('return state.user?.name ?? \'anonymous\'')
+		expect(code).toContain('() => state.user?.name ?? \'anonymous\'')
 		expect(paragraph.getAttribute('title')).toBe('Ada')
 		expect(paragraph.textContent).toBe('Ada')
 
@@ -960,7 +973,7 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 
 		const element = container.querySelector('div')
 
-		expect(code).toContain('style: () => ({')
+		expect(code).toContain('get style()')
 		expect(code).toContain('color: state.styles.color')
 		expect(code).toContain('state.styles.fontSize ? {')
 		expect(element.style.color).toBe('red')
@@ -1014,7 +1027,7 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 			state,
 		}))
 
-		expect(code).toContain(', () => state.profile.name')
+		expect(code).toContain('() => state.profile.name')
 		expect(container.textContent).toBe('Ada')
 
 		state.profile.name = 'Grace'
@@ -1042,7 +1055,10 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 
 		const host = container.querySelector('div')
 
-		expect(code).toContain('h("div", null, state)')
+		// `state` is an identifier and therefore treated as a static reference —
+		// no thunk wrapping. The runtime renders the object as a placeholder
+		// comment because it isn't a primitive child.
+		expect(code).toContain('children: state')
 		expect(code).not.toContain('() => state')
 		expect(host.childNodes).toHaveLength(1)
 		expect(host.firstChild.nodeType).toBe(Node.COMMENT_NODE)
@@ -1052,7 +1068,7 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 		expect(host.innerHTML).toBe('<!--null-->')
 	})
 
-	it('does not wrap identifier intrinsic props carrying tree objects', ()=> {
+	it('emits identifier intrinsic props as plain references; runtime reactively reads the proxy/tree they point to', ()=> {
 		const { code, App } = compileComponent(`
 			const App = ({ styles, model }) => (
 				<section>
@@ -1078,23 +1094,29 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 		const card = container.querySelector('div')
 		const input = container.querySelector('input')
 
+		// Identifiers are emitted as plain references, not getters.
 		expect(code).toContain('style: styles')
-		expect(code).not.toContain('style: () => styles')
+		expect(code).not.toContain('get style()')
 		expect(code).toContain('value: model')
-		expect(code).not.toContain('value: () => model')
+		expect(code).not.toContain('get value()')
+		// Initial mount applies the tree's current state.
 		expect(card.style.color).toBe('red')
 		expect(input.value).toBe('[object Object]')
 
+		// Mutating the tree updates the DOM: each prop's binding effect
+		// re-runs because `applyStyleProp` iterates the proxy inside its own
+		// binding effect, picking up tracked reads. (`value` is a string
+		// property that coerces the object — still updates on assignment.)
 		styles.color = 'blue'
-		model.value = 'B'
-
-		expect(card.style.color).toBe('red')
-		expect(input.value).toBe('[object Object]')
+		expect(card.style.color).toBe('blue')
 	})
 
-	it('wraps dynamic component props as accessor thunks so createTree field updates are reactive', ()=> {
+	it('emits dynamic component props as getters; children that read props.<x> stay reactive across updates', ()=> {
+		// Child reads `props.label` directly (Solid-style proxy access) instead
+		// of destructuring, so each access goes through the mergeProps proxy
+		// and observes the getter's signal reads.
 		const { code, App } = compileComponent(`
-			const Child = ({ label }) => <span>{label}</span>
+			const Child = (props) => <span>{props.label}</span>
 			const App = ({ state }) => <Child label={state.label} />
 		`)
 		const state = createTree({
@@ -1107,34 +1129,18 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 			state,
 		}))
 
-		expect(code).toContain('label: () => state.label')
+		expect(code).toContain('get label()')
+		expect(code).toContain('return state.label')
 		expect(container.textContent).toBe('Todo')
 
 		state.label = 'Done'
 		expect(container.textContent).toBe('Done')
 	})
 
-	it('wraps Dynamic component prop as accessor thunk so tag updates from createTree are reactive', ()=> {
-		const source = `
+	it('emits Dynamic component prop as a getter so tag updates from createTree are reactive', ()=> {
+		const { code, App } = compileComponent(`
 			const App = ({ state }) => <Dynamic component={state.tag}>Value</Dynamic>
-		`
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'classic',
-					pragma: 'h',
-					pragmaFrag: 'Fragment',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-
-		const code = transformed?.code ?? ''
-		const factory = new Function('h', 'Fragment', 'Dynamic', `${code}; return App;`)
-		const App = factory(h, Symbol('Fragment'), Dynamic)
+		`)
 
 		const state = createTree({
 			tag: 'span',
@@ -1146,7 +1152,8 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 			state,
 		}))
 
-		expect(code).toContain('component: () => state.tag')
+		expect(code).toContain('get component()')
+		expect(code).toContain('return state.tag')
 		expect(container.firstChild.tagName).toBe('SPAN')
 
 		state.tag = 'strong'
@@ -1155,16 +1162,12 @@ describe('babel plugin: createTree reactivity in compiled components', ()=> {
 	})
 })
 
-describe('babel plugin: reactive spread', ()=> {
+describe('babel plugin: reactive spread via mergeProps', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''
 	})
 
-	it('rewrites a non-static JSX spread into an __rspread__N thunk prop', ()=> {
-		const source = `
-			const view = <div a={1} {...api().getRootProps()} b={2} />
-		`
-
+	const compileWithAutomatic = (source)=> {
 		const transformed = transformSync(source, {
 			configFile: false,
 			babelrc: false,
@@ -1177,81 +1180,65 @@ describe('babel plugin: reactive spread', ()=> {
 			]],
 			plugins: [transformReactivePlugin],
 		})
+		return transformed?.code ?? ''
+	}
 
-		const code = transformed?.code ?? ''
+	it('wraps a non-static JSX spread in a thunk argument to mergeProps', ()=> {
+		const code = compileWithAutomatic(`const view = <div a={1} {...api().getRootProps()} b={2} />`)
 
-		expect(code).toContain('__rspread__0: () => api().getRootProps()')
-		expect(code).not.toContain('...api()')
+		// Non-spread attributes around the spread group into their own object
+		// arguments; the dynamic spread becomes its own thunk argument so the
+		// proxy re-evaluates it lazily.
+		expect(code).toContain('mergeProps(')
+		expect(code).toContain('() => api().getRootProps()')
+		expect(code).toContain('a: 1')
+		expect(code).toContain('b: 2')
 	})
 
-	it('numbers multiple spreads on the same element distinctly', ()=> {
-		const source = `
-			const view = <div {...one()} {...two()} />
-		`
-
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'automatic',
-					importSource: 'plastic',
-				},
-			]],
-			plugins: [transformReactivePlugin],
+	it('adds attributes that appear later in a dynamic spread source', ()=> {
+		const { App } = compileComponent(`
+			const App = ({ state }) => <div {...state.props} />
+		`)
+		const state = createTree({
+			props: {
+				title: 'hello',
+			},
 		})
 
-		const code = transformed?.code ?? ''
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(App, {
+			state,
+		}))
 
-		expect(code).toContain('__rspread__0: () => one()')
-		expect(code).toContain('__rspread__1: () => two()')
+		const el = container.querySelector('div')
+		expect(el.getAttribute('title')).toBe('hello')
+		expect(el.getAttribute('data-x')).toBe(null)
+
+		state.props['data-x'] = '1'
+		expect(el.getAttribute('data-x')).toBe('1')
 	})
 
-	it('leaves a static object-literal spread untouched', ()=> {
-		const source = `
-			const view = <div {...{ id: 'x', title: 'y' }} />
-		`
+	it('emits each dynamic spread as a distinct thunk argument', ()=> {
+		const code = compileWithAutomatic(`const view = <div {...one()} {...two()} />`)
 
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'automatic',
-					importSource: 'plastic',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-
-		const code = transformed?.code ?? ''
-
-		expect(code).not.toContain('__rspread__')
+		expect(code).toContain('() => one()')
+		expect(code).toContain('() => two()')
 	})
 
-	it('updates DOM attributes when the spread source returns new values', ()=> {
-		const source = `
+	it('leaves a static object-literal spread as a plain object argument', ()=> {
+		const code = compileWithAutomatic(`const view = <div {...{ id: 'x', title: 'y' }} />`)
+
+		// Static spread keeps its identity — emitted directly, not wrapped in a thunk.
+		expect(code).not.toContain('() => ({')
+		expect(code).toContain("id: 'x'")
+		expect(code).toContain("title: 'y'")
+	})
+
+	it('updates DOM attributes when a dynamic spread source returns new values', ()=> {
+		const { App } = compileComponent(`
 			const App = ({ state }) => <div {...({ 'data-value': state.value, title: state.title })} />
-		`
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'classic',
-					pragma: 'h',
-					pragmaFrag: 'Fragment',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-		const code = transformed?.code ?? ''
-		const factory = new Function('h', 'Fragment', `${code}; return App;`)
-		const App = factory(h, Symbol('Fragment'))
-
+		`)
 		const state = createTree({
 			value: '1',
 			title: 'first',
@@ -1264,8 +1251,6 @@ describe('babel plugin: reactive spread', ()=> {
 		}))
 
 		const el = container.querySelector('div')
-
-		expect(code).toContain('__rspread__0: () =>')
 		expect(el.getAttribute('data-value')).toBe('1')
 		expect(el.getAttribute('title')).toBe('first')
 
@@ -1277,26 +1262,9 @@ describe('babel plugin: reactive spread', ()=> {
 	})
 
 	it('clears attributes that drop out of the spread on a later run', ()=> {
-		const source = `
+		const { App } = compileComponent(`
 			const App = ({ state }) => <div {...state.props} />
-		`
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'classic',
-					pragma: 'h',
-					pragmaFrag: 'Fragment',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-		const code = transformed?.code ?? ''
-		const factory = new Function('h', 'Fragment', `${code}; return App;`)
-		const App = factory(h, Symbol('Fragment'))
-
+		`)
 		const state = createTree({
 			props: {
 				title: 'hello',
@@ -1311,7 +1279,6 @@ describe('babel plugin: reactive spread', ()=> {
 		}))
 
 		const el = container.querySelector('div')
-
 		expect(el.getAttribute('title')).toBe('hello')
 		expect(el.getAttribute('data-x')).toBe('1')
 
@@ -1324,27 +1291,10 @@ describe('babel plugin: reactive spread', ()=> {
 	})
 
 	it('swaps event handlers across spread re-evaluations', ()=> {
-		const source = `
+		const { App } = compileComponent(`
 			const App = ({ state }) => <button {...({ onClick: state.handler })}>x</button>
-		`
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'classic',
-					pragma: 'h',
-					pragmaFrag: 'Fragment',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-		const code = transformed?.code ?? ''
-		const factory = new Function('h', 'Fragment', `${code}; return App;`)
-		const App = factory(h, Symbol('Fragment'))
-
-		let calls = []
+		`)
+		const calls = []
 		const state = createTree({
 			handler: ()=> calls.push('a'),
 		})
@@ -1365,26 +1315,9 @@ describe('babel plugin: reactive spread', ()=> {
 	})
 
 	it('lets static props after a spread override its keys', ()=> {
-		const source = `
+		const { App } = compileComponent(`
 			const App = ({ state }) => <div {...({ 'data-x': state.value })} data-x="fixed" />
-		`
-		const transformed = transformSync(source, {
-			configFile: false,
-			babelrc: false,
-			presets: [[
-				'@babel/preset-react',
-				{
-					runtime: 'classic',
-					pragma: 'h',
-					pragmaFrag: 'Fragment',
-				},
-			]],
-			plugins: [transformReactivePlugin],
-		})
-		const code = transformed?.code ?? ''
-		const factory = new Function('h', 'Fragment', `${code}; return App;`)
-		const App = factory(h, Symbol('Fragment'))
-
+		`)
 		const state = createTree({
 			value: 'from-spread',
 		})
@@ -1396,7 +1329,6 @@ describe('babel plugin: reactive spread', ()=> {
 		}))
 
 		const el = container.querySelector('div')
-
 		expect(el.getAttribute('data-x')).toBe('fixed')
 	})
 
@@ -1672,7 +1604,7 @@ describe('babel plugin: attribute spread – runtime behavior edge cases', ()=> 
 		expect(el.style.fontWeight).toBe('bold')
 	})
 
-	it('composes onClick handlers from spread and explicit attr, invoking both in source order', ()=> {
+	it('onClick from explicit attr wins over spread (last-wins, matches Solid)', ()=> {
 		const calls = []
 		const { App } = compileComponent(`
 			const App = ({ h1, h2 }) => <button {...({ onClick: h1 })} onClick={h2}>x</button>
@@ -1686,7 +1618,7 @@ describe('babel plugin: attribute spread – runtime behavior edge cases', ()=> 
 		}))
 
 		container.querySelector('button').click()
-		expect(calls).toEqual(['spread', 'explicit'])
+		expect(calls).toEqual(['explicit'])
 	})
 
 	it('updates dynamic spread and dynamic attr independently without cross-triggering', ()=> {
@@ -1942,5 +1874,67 @@ describe('babel plugin: attribute spread – runtime behavior edge cases', ()=> 
 		state.label = 'Done'
 		expect(el.textContent).toBe('Done')
 		expect(el.disabled).toBe(true)
+	})
+
+	it('compiles component-level {...props} spread as mergeProps(props) without a thunk', ()=> {
+		const { code } = compileComponent(`
+			function App() {}
+			function Child(props) {
+				return <GrandChild {...props} />
+			}
+		`)
+
+		expect(code).toContain('mergeProps(props)')
+		expect(code).not.toContain('() => props')
+	})
+
+	it('grandchild receives a mergeProps proxy when parent spreads its own props', ()=> {
+		const { App } = compileComponent(`
+			const GrandChild = (props) => <span>{props.label}</span>
+			const Child = (props) => <GrandChild {...props} />
+			const App = (props) => <Child label={props.label} />
+		`)
+		const state = createTree({ label: 'hello' })
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		renderApp(container, h(App, state))
+
+		expect(container.textContent).toBe('hello')
+
+		state.label = 'world'
+		expect(container.textContent).toBe('world')
+	})
+
+	it('grandchild props remain a mergeProps proxy after {...props} passthrough', ()=> {
+		let capturedProps
+		const GrandChild = (props)=> {
+			capturedProps = props
+			return null
+		}
+		const Child = (props)=> jsx(GrandChild, mergeProps(props))
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		renderApp(container, h(Child, { a: 1 }))
+
+		expect(isMergedProps(capturedProps)).toBe(true)
+	})
+})
+
+describe('mergeProps: isMergedProps', ()=> {
+	it('returns true for a mergeProps proxy', ()=> {
+		expect(isMergedProps(mergeProps({ a: 1 }))).toBe(true)
+	})
+
+	it('returns false for plain objects and non-objects', ()=> {
+		expect(isMergedProps({})).toBe(false)
+		expect(isMergedProps(null)).toBe(false)
+		expect(isMergedProps(42)).toBe(false)
+	})
+
+	it('marker symbol does not appear in ownKeys', ()=> {
+		const proxy = mergeProps({ a: 1 })
+		expect(Reflect.ownKeys(proxy).every(k=> typeof k === 'string')).toBe(true)
 	})
 })

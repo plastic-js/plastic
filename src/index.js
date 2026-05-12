@@ -39,6 +39,8 @@ import {
 	useSearchParams,
 } from './router.js'
 import { batch } from './reactivity.js'
+import { mergeProps } from './merge-props.js'
+import { createSplitProps, splitProps } from './split-props.js'
 
 export {
 	Case,
@@ -78,5 +80,8 @@ export {
 	createContext,
 	useContext,
 	batch,
+	mergeProps,
+	splitProps,
+	createSplitProps,
 }
 

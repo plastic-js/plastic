@@ -18,7 +18,9 @@ export default defineConfig({
 						},
 					],
 				],
-				plugins: [babelReactive, babelControlFlow],
+				// Control-flow plugin runs first so its synthesized branch/case
+				// attributes flow through the reactive plugin's mergeProps rewrite.
+				plugins: [babelControlFlow, babelReactive],
 			},
 		}),
 	],

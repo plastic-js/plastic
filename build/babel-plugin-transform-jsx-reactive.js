@@ -1,119 +1,85 @@
 /**
  * babel-plugin-transform-jsx-reactive
  *
- * Ensures that dynamic (non-static) expressions inside JSX are wrapped with
- * arrow functions so that the runtime's reactive system can track and re-run
- * them independently when their signal dependencies change.
+ * Rewrites each JSX element's attribute list and children into a single
+ * `mergeProps(...)` call so that the runtime sees one reactive proxy per
+ * element, regardless of how many spreads or sibling attributes appear.
  *
- * This replaces the older `transform-dynamic` and `transform-ternary` plugins.
- * `transform-dynamic` was a strict superset of `transform-ternary`, so they
- * are merged here into one comprehensive plugin.
+ *   <MyComp {...api()} foo={2} bar={state.b}>{kid}</MyComp>
+ *   →
+ *   <MyComp {...mergeProps(api(), {
+ *     foo: 2,
+ *     get bar() { return state.b },
+ *     get children() { return kid }
+ *   })} />
  *
- * Three transforms are applied:
+ * `mergeProps` returns a Proxy: reading `proxy.bar` invokes the getter, which
+ * is where the reactive system observes signal reads. Static expressions
+ * (literals, identifiers, inline functions, etc.) are emitted as plain values
+ * so they incur no proxy overhead.
  *
- *   1. JSX children expressions:
- *      `<div>{someSignal()}</div>`
- *      → `<div>{() => someSignal()}</div>`
+ * Consecutive non-spread attributes are grouped into one object literal;
+ * spread attributes are passed through as positional arguments to mergeProps,
+ * preserving JSX prop-order semantics (later sources override earlier ones
+ * for normal keys; class/style/ref/onXxx have their own merge rules in
+ * `src/merge-props.js`).
  *
- *   2. Intrinsic element attribute values (non-event, non-ref):
- *      `<input disabled={isDisabled()} />`
- *      → `<input disabled={() => isDisabled()} />`
+ * Children are injected as a `get children()` getter on the trailing object
+ * group so the proxy stays the sole carrier of element data — the JSX is
+ * emitted as self-closing, so `@babel/preset-react`'s automatic runtime
+ * produces `jsx(Tag, mergeProps(...))` directly without re-spreading.
  *
- *   3. JSX spread attributes whose source is non-static:
- *      `<div a={x} {...api().getRootProps()} b={y} />`
- *      → `<div a={x} __rspread__0={() => api().getRootProps()} b={y} />`
- *      The runtime recognises the `__rspread__N` prefix and applies the
- *      thunk's output reactively, preserving JSX prop order so that
- *      attributes after the spread can still override its keys at apply
- *      time. Each element gets its own counter so multiple spreads on the
- *      same element produce distinct keys.
- *
- * Expressions that are provably static (literals, identifiers, inline
- * functions, plain objects/arrays with no dynamic parts, etc.) are left
- * as-is to avoid unnecessary wrapper overhead.
- *
- * Event handler props (`onXxx`) and `ref` are excluded from attribute
- * wrapping because the runtime consumes them directly as plain values.
+ * Dynamic event handlers no longer need a compile-time indirection wrapper:
+ * the runtime's `applyProps` attaches a single listener that resolves the
+ * handler via the proxy at call time, so changing the handler reference is
+ * picked up naturally.
  */
 
 const plugin = function(babel){
 	const { types: t } = babel
 
 	// ---------------------------------------------------------------------------
-	// Helpers: classify element / prop names
+	// Static-expression analysis: identical to the previous plugin so that
+	// already-stable values continue to be emitted as plain object properties
+	// rather than getters.
 	// ---------------------------------------------------------------------------
 
-	/** Returns true when a JSX element name is an intrinsic (lower-case) HTML element. */
-	const isIntrinsicElementName = name=> t.isJSXIdentifier(name) && (/^[a-z]/).test(name.name)
-
-	/** Returns true for event handler prop names such as `onClick`, `onInput`, etc. */
-	const isEventPropName = name=> (/^on[A-Z]/).test(name)
-
-	// ---------------------------------------------------------------------------
-	// Helpers: static-expression analysis
-	// ---------------------------------------------------------------------------
-
-	/**
-	 * Unwraps TypeScript type-cast wrappers and parenthesized expressions to
-	 * reach the underlying value node for static analysis.
-	 */
 	const unwrapExpression = (node)=> {
 		if (t.isTSAsExpression?.(node) || t.isTSSatisfiesExpression?.(node) || t.isTSNonNullExpression?.(node) || t.isTypeCastExpression?.(node)){
 			return unwrapExpression(node.expression)
 		}
-
 		if (t.isParenthesizedExpression(node)){
 			return unwrapExpression(node.expression)
 		}
-
 		return node
 	}
 
-	/**
-	 * Returns true when the expression is guaranteed to be stable across renders
-	 * and therefore does not need a reactive wrapper.
-	 *
-	 * Static nodes: literals, identifiers, `this`, inline functions, JSX itself,
-	 * and any composite expressions (unary, binary, template literals, arrays,
-	 * objects) whose every sub-expression is also static.
-	 *
-	 * Dynamic nodes: anything that performs a read that may change over time —
-	 * member access, function calls, `new`, `await`, `yield`, assignment, and
-	 * tagged templates.
-	 */
 	const isStaticExpression = (input)=> {
 		const node = unwrapExpression(input)
-
 		if (!node){
 			return true
 		}
 
-		// Leaf literals and stable references are always static.
 		if (
 			t.isStringLiteral(node) || t.isNumericLiteral(node) || t.isBooleanLiteral(node) || t.isNullLiteral(node) || t.isBigIntLiteral?.(node) || t.isRegExpLiteral?.(node) || t.isIdentifier(node) || t.isThisExpression(node) || t.isArrowFunctionExpression(node) || t.isFunctionExpression(node)
 		){
 			return true
 		}
 
-		// A JSX element always implies DOM node creation — treat as dynamic.
 		if (t.isJSXElement(node)){
 			return false
 		}
 
-		// An empty fragment creates no DOM nodes and is stable.
-		// A non-empty fragment implies DOM node creation — treat as dynamic.
 		if (t.isJSXFragment(node)){
 			return node.children.every(child=> t.isJSXText(child) && child.value.trim() === '')
 		}
 
-		// These node types perform reads or side-effects that can vary at runtime.
 		if (
 			t.isMemberExpression(node) || t.isOptionalMemberExpression?.(node) || t.isCallExpression(node) || t.isOptionalCallExpression?.(node) || t.isNewExpression(node) || t.isAwaitExpression?.(node) || t.isYieldExpression?.(node) || t.isAssignmentExpression(node) || t.isUpdateExpression(node) || t.isTaggedTemplateExpression(node)
 		){
 			return false
 		}
 
-		// Composite expressions: static only when all operands are static.
 		if (t.isUnaryExpression(node)){
 			return isStaticExpression(node.argument)
 		}
@@ -135,11 +101,9 @@ const plugin = function(babel){
 				if (!element){
 					return true
 				}
-
 				if (t.isSpreadElement(element)){
 					return isStaticExpression(element.argument)
 				}
-
 				return isStaticExpression(element)
 			})
 		}
@@ -147,19 +111,14 @@ const plugin = function(babel){
 		if (t.isObjectExpression(node)){
 			return node.properties.every((property)=> {
 				if (t.isSpreadElement(property)){
-					// A spread may pull in dynamic values at runtime; always treat as dynamic.
 					return false
 				}
-
-				// Object methods (shorthand) are always stable function definitions.
 				if (t.isObjectMethod(property)){
 					return true
 				}
-
 				if (!t.isObjectProperty(property)){
 					return false
 				}
-
 				const isKeyStatic = property.computed ? isStaticExpression(property.key) : true
 				return isKeyStatic && isStaticExpression(property.value)
 			})
@@ -172,133 +131,324 @@ const plugin = function(babel){
 		return false
 	}
 
-	/**
-	 * Returns true when `expression` is non-empty and non-static, i.e. it
-	 * should be wrapped with an arrow function to defer its evaluation.
-	 */
-	const shouldWrapExpression = (expression)=> {
-		if (!expression || t.isJSXEmptyExpression(expression)){
-			return false
-		}
+	// ---------------------------------------------------------------------------
+	// Helpers
+	// ---------------------------------------------------------------------------
 
-		return !isStaticExpression(expression)
+	// Tracks JSX nodes we have already rewritten so the visitor does not re-enter
+	// them after we replace their attributes / children. Babel continues
+	// traversing into the mutated subtree, which would otherwise loop.
+	const rewritten = new WeakSet()
+
+	// Convert a JSX child node into a plain expression. Dynamic JSXExpression
+	// children are wrapped in a thunk so the runtime's `appendChild` /
+	// `node2Element` path detects them and creates a reactive child node —
+	// preserving per-child re-render granularity from the previous design.
+	// JSXElement children are left as-is; this plugin's own visitor rewrites
+	// them into structural `_jsx(...)` calls (one DOM instance, no wrapping).
+	const jsxChildToExpression = (child)=> {
+		if (t.isJSXText(child)){
+			const trimmed = child.value.replace(/\s+/g, ' ')
+			if (!trimmed.trim()){
+				return null
+			}
+			return t.stringLiteral(trimmed)
+		}
+		if (t.isJSXExpressionContainer(child)){
+			if (t.isJSXEmptyExpression(child.expression)){
+				return null
+			}
+			const expr = child.expression
+			if (isStaticExpression(expr)){
+				return expr
+			}
+			return t.arrowFunctionExpression([], expr)
+		}
+		if (t.isJSXSpreadChild(child)){
+			return t.spreadElement(child.expression)
+		}
+		return child
 	}
 
-	// ---------------------------------------------------------------------------
-	// Plugin visitors
-	// ---------------------------------------------------------------------------
+	// Build the literal property key for an attribute name. JSX allows
+	// `aria-foo`, `data-bar`, namespaced names like `xlink:href`, etc., none of
+	// which are valid JS identifiers — emit them as string literals.
+	const jsxNameToKey = (jsxName)=> {
+		if (t.isJSXIdentifier(jsxName)){
+			const name = jsxName.name
+			if ((/^[a-zA-Z_$][\w$]*$/).test(name)){
+				return { key: t.identifier(name), computed: false, name }
+			}
+			return { key: t.stringLiteral(name), computed: false, name }
+		}
+		if (t.isJSXNamespacedName(jsxName)){
+			const name = `${jsxName.namespace.name}:${jsxName.name.name}`
+			return { key: t.stringLiteral(name), computed: false, name }
+		}
+		// Fallback — unreachable for valid JSX.
+		return { key: t.stringLiteral(String(jsxName)), computed: false, name: String(jsxName) }
+	}
+
+	// Build the value expression for a JSXAttribute.
+	const jsxAttrValueToExpression = (attr)=> {
+		if (attr.value == null){
+			// `<input disabled />` → `disabled: true`
+			return t.booleanLiteral(true)
+		}
+		if (t.isStringLiteral(attr.value)){
+			return attr.value
+		}
+		if (t.isJSXExpressionContainer(attr.value)){
+			if (t.isJSXEmptyExpression(attr.value.expression)){
+				return t.identifier('undefined')
+			}
+			return attr.value.expression
+		}
+		if (t.isJSXElement(attr.value) || t.isJSXFragment(attr.value)){
+			return attr.value
+		}
+		return attr.value
+	}
+
+	// Construct an ObjectExpression from a list of JSXAttributes (non-spread),
+	// plus an optional synthetic `children` source.
+	const buildObjectExpression = (jsxAttrs, syntheticChildren)=> {
+		const properties = []
+
+		for (const attr of jsxAttrs){
+			const { key, computed, name } = jsxNameToKey(attr.name)
+			const value = jsxAttrValueToExpression(attr)
+
+			if (isStaticExpression(value)){
+				properties.push(t.objectProperty(key, value, computed))
+				continue
+			}
+
+			// Dynamic: emit as a getter so reading the proxy invokes the expression
+			// inside the current tracking scope.
+			const getter = t.objectMethod('get', key, [], t.blockStatement([
+				t.returnStatement(value),
+			]), computed)
+			properties.push(getter)
+
+			// `name` is unused but kept for potential future special-case logic
+			// (e.g. always-static names like `key`).
+			void name
+		}
+
+		if (syntheticChildren && syntheticChildren.length > 0){
+			const childExprs = syntheticChildren.map(jsxChildToExpression).filter(Boolean)
+			if (childExprs.length > 0){
+				const key = t.identifier('children')
+				const value = childExprs.length === 1 && !t.isSpreadElement(childExprs[0])
+					? childExprs[0]
+					: t.arrayExpression(childExprs)
+				properties.push(t.objectProperty(key, value))
+			}
+		}
+
+		return t.objectExpression(properties)
+	}
+
+	// Group attributes so that consecutive non-spread attributes form one
+	// ObjectExpression while spreads remain positional. Children are attached
+	// to the trailing object group (creating one if necessary).
+	const buildMergePropsArgs = (jsxAttrs, jsxChildren)=> {
+		const groups = []
+		for (const attr of jsxAttrs){
+			if (t.isJSXSpreadAttribute(attr)){
+				groups.push({ kind: 'spread', node: attr.argument })
+			} else {
+				const last = groups[groups.length - 1]
+				if (last && last.kind === 'object'){
+					last.attrs.push(attr)
+				} else {
+					groups.push({ kind: 'object', attrs: [attr] })
+				}
+			}
+		}
+
+		const meaningfulChildren = jsxChildren.filter((child)=> {
+			if (t.isJSXText(child)){
+				return child.value.replace(/\s+/g, ' ').trim() !== ''
+			}
+			if (t.isJSXExpressionContainer(child) && t.isJSXEmptyExpression(child.expression)){
+				return false
+			}
+			return true
+		})
+
+		if (meaningfulChildren.length > 0){
+			const last = groups[groups.length - 1]
+			if (last && last.kind === 'object'){
+				last.syntheticChildren = meaningfulChildren
+			} else {
+				groups.push({ kind: 'object', attrs: [], syntheticChildren: meaningfulChildren })
+			}
+		}
+
+		return groups.map((group)=> {
+			if (group.kind === 'spread'){
+				// Dynamic spread sources (e.g. `{...api()}`) must be wrapped in a
+				// thunk so `mergeProps` can re-evaluate them when their signal
+				// dependencies change. Static sources (object literals, plain
+				// identifiers) are passed through directly.
+				if (isStaticExpression(group.node)){
+					return group.node
+				}
+				return t.arrowFunctionExpression([], group.node)
+			}
+			return buildObjectExpression(group.attrs, group.syntheticChildren)
+		})
+	}
+
+	// Ensure the file imports `name` from `plastic/jsx-runtime`. In module mode,
+	// adds an ImportSpecifier (re-using one if present). In script mode (tests
+	// that pass code through `new Function`), returns a bare identifier of the
+	// same name; the test harness is responsible for providing that binding.
+	const ensureRuntimeImport = (path, name)=> {
+		const program = path.findParent(p=> p.isProgram()) ?? path.hub?.file?.path
+		if (!program){
+			return t.identifier(name)
+		}
+		if (program.node.sourceType !== 'module'){
+			return t.identifier(name)
+		}
+
+		const cacheKey = `runtimeImport:${name}`
+		const cachedId = program.getData(cacheKey)
+		if (cachedId){
+			return t.identifier(cachedId)
+		}
+
+		for (const stmt of program.node.body){
+			if (!t.isImportDeclaration(stmt)){
+				continue
+			}
+			if (stmt.source.value !== 'plastic/jsx-runtime'){
+				continue
+			}
+			for (const specifier of stmt.specifiers){
+				if (t.isImportSpecifier(specifier) && t.isIdentifier(specifier.imported, { name })){
+					program.setData(cacheKey, specifier.local.name)
+					return t.identifier(specifier.local.name)
+				}
+			}
+			const local = program.scope.generateUidIdentifier(name)
+			stmt.specifiers.push(t.importSpecifier(local, t.identifier(name)))
+			program.setData(cacheKey, local.name)
+			return t.identifier(local.name)
+		}
+
+		const local = program.scope.generateUidIdentifier(name)
+		const importDecl = t.importDeclaration(
+			[t.importSpecifier(local, t.identifier(name))],
+			t.stringLiteral('plastic/jsx-runtime'),
+		)
+		program.unshiftContainer('body', importDecl)
+		program.setData(cacheKey, local.name)
+		return t.identifier(local.name)
+	}
+
+	// Resolve the object part of a JSXMemberExpression to a JS expression.
+	// Unlike the standalone tag case, every node here references a JS value
+	// chain (e.g. `Theme.Provider`, `ark.div`), so a leading lowercase
+	// identifier is still a variable reference — never an intrinsic string.
+	const jsxMemberObjectToExpression = (node)=> {
+		if (t.isJSXIdentifier(node)){
+			return t.identifier(node.name)
+		}
+		if (t.isJSXMemberExpression(node)){
+			return t.memberExpression(jsxMemberObjectToExpression(node.object), t.identifier(node.property.name))
+		}
+		return t.identifier(String(node))
+	}
+
+	// Convert a JSXOpeningElement's tag name to a JS expression suitable as the
+	// first argument of `jsx(...)`. Standalone lower-case identifiers become
+	// string literals (intrinsic DOM tags); upper-case identifiers, namespaced
+	// names, and member expressions become references to the corresponding
+	// component / namespaced tag.
+	const jsxTagToExpression = (name)=> {
+		if (t.isJSXIdentifier(name)){
+			if ((/^[a-z]/).test(name.name)){
+				return t.stringLiteral(name.name)
+			}
+			return t.identifier(name.name)
+		}
+		if (t.isJSXMemberExpression(name)){
+			return t.memberExpression(jsxMemberObjectToExpression(name.object), t.identifier(name.property.name))
+		}
+		if (t.isJSXNamespacedName(name)){
+			return t.stringLiteral(`${name.namespace.name}:${name.name.name}`)
+		}
+		return t.identifier(String(name))
+	}
 
 	return {
 		name: 'transform-jsx-reactive',
 		visitor: {
-			/**
-			 * Wrap dynamic expressions used as JSX children.
-			 *
-			 * `<div>{expr}</div>` → `<div>{() => expr}</div>`
-			 *
-			 * Attribute containers are skipped here; they are handled in the
-			 * JSXAttribute visitor below with finer-grained exclusion rules.
-			 */
-			JSXExpressionContainer(path){
-				if (path.parentPath.isJSXAttribute()){
+			JSXElement(path){
+				const node = path.node
+				if (rewritten.has(node)){
 					return
 				}
+				rewritten.add(node)
 
-				const expression = path.get('expression')
+				const opening = node.openingElement
+				const attrs = opening.attributes
+				const children = node.children
 
-				if (shouldWrapExpression(expression.node)){
-					expression.replaceWith(t.arrowFunctionExpression([], expression.node))
+				const tagExpr = jsxTagToExpression(opening.name)
+				const args = buildMergePropsArgs(attrs, children)
+
+				// No attrs and no meaningful children → emit jsx(Tag, {}) directly.
+				let propsExpr
+				if (args.length === 0){
+					propsExpr = t.objectExpression([])
+				} else {
+					const mergeId = ensureRuntimeImport(path, 'mergeProps')
+					propsExpr = t.callExpression(mergeId, args)
 				}
+
+				const jsxId = ensureRuntimeImport(path, 'jsx')
+				path.replaceWith(t.callExpression(jsxId, [tagExpr, propsExpr]))
 			},
 
-			/**
-			 * Wrap dynamic expressions on JSX element attributes (both intrinsic and
-			 * component elements).
-			 *
-			 * `<input value={signal()} />`  → `<input value={() => signal()} />`
-			 * `<Child count={state.count} />` → `<Child count={() => state.count} />`
-			 *
-			 * Excluded:
-			 *  - Event handlers (`onXxx`) — consumed directly as function values.
-			 *  - `ref` — the runtime reads it as a plain callback.
-			 *  - `children` — managed separately (as JSX children or lazy factories).
-			 *  - Already-static expressions — no wrapper needed.
-			 */
-			/**
-			 * Wrap dynamic spread attributes so the runtime can track them.
-			 *
-			 * `<div a={x} {...expr} b={y} />`
-			 * → `<div a={x} __rspread__0={() => expr} b={y} />`
-			 *
-			 * The `__rspread__N` prefix is the contract with the runtime's
-			 * `applyProps` function, which detects it and re-evaluates the
-			 * thunk inside a binding effect. Per-element counter keeps
-			 * multiple spreads on the same element distinct.
-			 *
-			 * Static spread sources (e.g. `{...{foo: 1}}`) are left to the
-			 * standard JSX transform, which inlines them with no overhead.
-			 */
-			JSXOpeningElement(path){
-				const attributes = path.node.attributes
-				let spreadIndex = 0
-				for (let i = 0; i < attributes.length; i++){
-					const attribute = attributes[i]
-					if (!t.isJSXSpreadAttribute(attribute)){
-						continue
+			// Fragments don't go through mergeProps (no attributes), but dynamic
+			// expression children inside a fragment still need wrapping to remain
+			// reactive — emit `jsx(Fragment, { children: [...] })` with getters for
+			// dynamic children.
+			JSXFragment(path){
+				const node = path.node
+				if (rewritten.has(node)){
+					return
+				}
+				rewritten.add(node)
+
+				const children = node.children
+				const meaningfulChildren = children.filter((child)=> {
+					if (t.isJSXText(child)){
+						return child.value.replace(/\s+/g, ' ').trim() !== ''
 					}
-					if (isStaticExpression(attribute.argument)){
-						continue
+					if (t.isJSXExpressionContainer(child) && t.isJSXEmptyExpression(child.expression)){
+						return false
 					}
+					return true
+				})
 
-					const wrapped = t.arrowFunctionExpression([], attribute.argument)
-					const propName = `__rspread__${spreadIndex++}`
-					attributes[i] = t.jsxAttribute(t.jsxIdentifier(propName), t.jsxExpressionContainer(wrapped))
-				}
-			},
-
-			JSXAttribute(path){
-				const attributeName = path.node.name
-
-				if (!t.isJSXIdentifier(attributeName)){
-					return
+				let propsExpr
+				if (meaningfulChildren.length === 0){
+					propsExpr = t.objectExpression([])
+				} else {
+					const obj = buildObjectExpression([], meaningfulChildren)
+					const mergeId = ensureRuntimeImport(path, 'mergeProps')
+					propsExpr = t.callExpression(mergeId, [obj])
 				}
 
-				if (!t.isJSXExpressionContainer(path.node.value)){
-					return
-				}
-
-				if (attributeName.name === 'ref' || attributeName.name === 'children'){
-					return
-				}
-
-				const expression = path.get('value.expression')
-				if (!shouldWrapExpression(expression.node)){
-					return
-				}
-
-				if (isEventPropName(attributeName.name)){
-					// Wrap dynamic event handlers so the actual function is resolved at
-					// call time rather than at bind time.
-					//
-					// `onClick={stateApi().onClick}`
-					// → `onClick={(...args) => { const _fn = stateApi().onClick; _fn?.(...args) }}`
-					//
-					// This ensures that when the state machine produces a new handler
-					// object (e.g. after a state transition), the DOM listener always
-					// delegates to the freshest function reference.
-					const argsId = t.identifier('args')
-					const fnId = t.identifier('_fn')
-					const wrapped = t.arrowFunctionExpression([t.restElement(argsId)], t.blockStatement([
-						t.variableDeclaration('const', [
-							t.variableDeclarator(fnId, expression.node),
-						]),
-						t.expressionStatement(t.optionalCallExpression(fnId, [t.spreadElement(t.identifier('args'))], true)),
-					]))
-					expression.replaceWith(wrapped)
-					return
-				}
-
-				expression.replaceWith(t.arrowFunctionExpression([], expression.node))
+				const jsxId = ensureRuntimeImport(path, 'jsx')
+				const fragmentId = ensureRuntimeImport(path, 'Fragment')
+				path.replaceWith(t.callExpression(jsxId, [fragmentId, propsExpr]))
 			},
 		},
 	}
