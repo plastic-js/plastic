@@ -98,7 +98,7 @@
 ## Performance Optimization
 - [X] Avoid unnecessary DOM writes when a reactive prop resolves to the same value.
 - [ ] Batch multiple signal-triggered DOM updates in the same microtask.
-- [ ] Implement batching updates to ensure that multiple signal modifications within the same microtask only trigger.
+- [X] Implement batching updates to ensure that multiple signal modifications within the same microtask only trigger.
 - [ ] Ensure that updates are applied in the correct order and that any necessary debouncing or batching strategies are implemented to optimize performance.
 
 # Extras
