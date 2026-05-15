@@ -538,10 +538,9 @@ const applyRefProp = (element, ref)=> {
 	const assignRef = value=> ref(value)
 
 	const owner = currentOwner
-	if (owner){
-		owner.refs.push(()=> {
-			assignRef(element)
-		})
+	
+	if (owner && !owner.mounted) {
+		owner.refs.push(() => assignRef(element))
 	} else {
 		assignRef(element)
 	}
