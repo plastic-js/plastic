@@ -3,6 +3,7 @@
 import {
 	afterEach, describe, expect, it, vi,
 } from 'vitest'
+import { mergeProps } from '../src/merge-props.js'
 import {
 	Case,
 	Default,
@@ -384,6 +385,54 @@ describe('jsx runtime static rendering', ()=> {
 
 		expect(element.style.color).toBe('blue')
 		expect(element.style.fontSize).toBe('')
+	})
+
+	it('preserves unrelated object style keys while updating changed ones', ()=> {
+		const styles = createSignal({
+			position: 'absolute',
+			transform: 'translate3d(var(--x), var(--y), 0)',
+			'--x': '10px',
+			'--y': '20px',
+			'--available-height': '100px',
+		})
+		const element = h('div', {
+			style: styles,
+		})
+
+		styles({
+			position: 'absolute',
+			transform: 'translate3d(var(--x), var(--y), 0)',
+			'--x': '10px',
+			'--y': '40px',
+			'--available-height': '100px',
+		})
+
+		expect(element.style.position).toBe('absolute')
+		expect(element.style.transform).toBe('translate3d(var(--x), var(--y), 0)')
+		expect(element.style.getPropertyValue('--x')).toBe('10px')
+		expect(element.style.getPropertyValue('--y')).toBe('40px')
+		expect(element.style.getPropertyValue('--available-height')).toBe('100px')
+	})
+
+	it('applies merged style objects from mergeProps to the DOM with later keys winning', ()=> {
+		const element = h('div', mergeProps(
+			{
+				style: {
+					'--tour-layer': 2,
+					'--z-index': 'auto',
+					zIndex: 'var(--z-index)',
+				},
+			},
+			{
+				style: {
+					zIndex: 9999,
+				},
+			},
+		))
+
+		expect(element.style.getPropertyValue('--tour-layer')).toBe('2')
+		expect(element.style.getPropertyValue('--z-index')).toBe('auto')
+		expect(element.style.zIndex).toBe('9999')
 	})
 
 	it('updates style from a getter that reads createTree style fields', ()=> {

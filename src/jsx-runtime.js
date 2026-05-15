@@ -402,32 +402,44 @@ const applyClassNameMap = (element, classNameMap)=> {
 // element's current classList so re-runs (e.g. via an enclosing binding
 // effect) drop tokens that disappeared from the new value.
 const applyClassProp = (element, value)=> {
-	if (isReactive(value)){
-		createBindingEffect(()=> {
-			applyClassProp(element, resolveReactiveValue(value))
-		})
-		return
-	}
-
 	const expectedClass = toClassMap(value)
 	const actualClass = new Set(element.classList)
 	const shouldRemove = [...actualClass].filter(className=> !expectedClass.has(className))
 	const combinedClassMap = new Map([...expectedClass, ...shouldRemove.map(className=> [className, false])])
 	applyClassNameMap(element, combinedClassMap)
 }
-const applyStyleObject = (element, styles)=> {
-	Object.entries(styles).forEach(([property, value])=> {
+const applyStyleObject = (element, styles, prevStyles = {})=> {
+	const nextStyles = styles ?? {}
+
+	Object.keys(prevStyles).forEach((property)=> {
+		if (nextStyles[property] != null && nextStyles[property] !== false){
+			return
+		}
+
+		clearStyleKey(element, property)
+		delete prevStyles[property]
+	})
+
+	Object.entries(nextStyles).forEach(([property, value])=> {
 		if (value == null || value === false){
 			return
 		}
 
-		if (property.startsWith('--')){
-			element.style.setProperty(property, String(value))
+		const nextValue = String(value)
+		if (prevStyles[property] === nextValue){
 			return
 		}
 
-		element.style[property] = value
+		if (property.startsWith('--')){
+			element.style.setProperty(property, nextValue)
+		} else {
+			element.style[property] = nextValue
+		}
+
+		prevStyles[property] = nextValue
 	})
+
+	return prevStyles
 }
 
 const clearStyleKey = (element, key)=> {
@@ -438,31 +450,22 @@ const clearStyleKey = (element, key)=> {
 	}
 }
 
-// Apply a style value to an element. Always wipes `cssText` first so a
-// re-run with fewer keys (e.g. an object source losing properties, or the
-// value switching to null) doesn't leave stale declarations behind.
-const applyStyleProp = (element, value)=> {
-	if (isReactive(value)){
-		createBindingEffect(()=> {
-			applyStyleProp(element, resolveReactiveValue(value))
-		})
-		return
-	}
-
+const applyStyleProp = (element, value, prevValue)=> {
 	if (value == null || value === false){
 		element.style.cssText = ''
-		return
+		return undefined
 	}
 
 	if (typeof value === 'string'){
 		element.style.cssText = value
-		return
+		return value
 	}
 
 	if (typeof value === 'object'){
-		element.style.cssText = ''
-		applyStyleObject(element, value)
+		return applyStyleObject(element, value, typeof prevValue === 'string' ? undefined : prevValue)
 	}
+
+	return prevValue
 }
 
 const clearDomProp = (element, key)=> {
@@ -582,6 +585,7 @@ const disposeBindings = (bindings)=> {
 // zero-arg accessor thunks (used widely by ark-plastic / zag adapters) are
 // unwrapped before being applied to the DOM.
 const bindReactiveProp = (element, props, key)=> {
+	let prevStyleValue
 	const stop = createBindingEffect(()=> {
 		const value = resolveReactiveValue(props[key])
 		if (key === 'className' || key === 'class'){
@@ -589,7 +593,7 @@ const bindReactiveProp = (element, props, key)=> {
 			return
 		}
 		if (key === 'style'){
-			applyStyleProp(element, value)
+			prevStyleValue = applyStyleProp(element, value, prevStyleValue)
 			return
 		}
 		const domKey = JSX_PROP_MAP[key] ?? key
@@ -603,7 +607,14 @@ const bindReactiveProp = (element, props, key)=> {
 			return
 		}
 		if (key === 'style'){
-			element.removeAttribute('style')
+			// Only clear style properties that Plastic itself set, preserving any
+			// inline styles written directly to the DOM by third-party libraries
+			// (e.g. Zag's pointer-events management via assignPointerEventToLayers).
+			if (prevStyleValue && typeof prevStyleValue === 'object'){
+				Object.keys(prevStyleValue).forEach(prop=> clearStyleKey(element, prop))
+			} else if (typeof prevStyleValue === 'string'){
+				element.style.cssText = ''
+			}
 			return
 		}
 		const domKey = JSX_PROP_MAP[key] ?? key
