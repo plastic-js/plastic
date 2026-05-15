@@ -324,8 +324,8 @@ const createReactiveChildNode = (reactiveValue)=> {
 		}
 
 		mountedNodes.forEach((node)=> {
-			if (node.parentNode === parent){
-				parent.removeChild(node)
+			if (node.parentNode){
+				node.parentNode.removeChild(node)
 			}
 		})
 		mountedNodes = []
