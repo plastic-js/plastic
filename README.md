@@ -102,6 +102,113 @@ Plastic's `mergeProps` shares the same surface API as Solid's but differs in thr
 - **Mount/dispose API**: `renderApp(container, node)` returns an idempotent disposer that unmounts DOM and disposes owner/effect scopes.
 - **Lifecycle hooks**: `onMount` and cleanup registration (`onCleanup` wrapper) are available for component-level setup and teardown.
 
+## Reactivity
+
+Plastic's reactivity layer is built on top of [alien-signals](https://github.com/stackblitz/alien-signals) and extends it with deep object reactivity. All primitives are exported from `jsx`.
+
+### Primitives
+
+#### `createSignal(initialValue)`
+
+Creates a reactive container for a single value. Reading the signal inside an `effect` or `createComputed` subscribes to it; writing triggers updates.
+
+```js
+import { createSignal, effect } from 'jsx'
+
+const count = createSignal(0)
+effect(() => console.log(count()))  // logs 0
+count(1)                             // logs 1
+```
+
+Passing an existing signal returns it unchanged — double-wrapping is a no-op.
+
+#### `createComputed(fn)`
+
+Creates a lazily-evaluated derived value. The computation re-runs only when its signal dependencies change.
+
+```js
+import { createSignal, createComputed } from 'jsx'
+
+const firstName = createSignal('Jane')
+const lastName  = createSignal('Doe')
+const fullName  = createComputed(() => `${firstName()} ${lastName()}`)
+
+fullName()  // 'Jane Doe'
+```
+
+#### `createTree(obj)`
+
+Wraps a plain object (or array) in a deep-reactive Proxy, equivalent to Vue 3's `reactive()`. Every property read subscribes to that property's signal; every write triggers only the affected property's subscribers.
+
+```js
+import { createTree, effect } from 'jsx'
+
+const state = createTree({ user: { name: 'Alice' }, count: 0 })
+
+effect(() => console.log(state.user.name))  // logs 'Alice'
+state.user.name = 'Bob'                      // logs 'Bob'
+```
+
+Nested objects are wrapped on demand when accessed, so reactivity is deep without upfront cost. Calling `createTree` on an already-reactive tree is a no-op.
+
+#### `effect(fn)`
+
+Runs `fn` immediately and re-runs it whenever any signal read inside it changes.
+
+```js
+import { createSignal, effect } from 'jsx'
+
+const x = createSignal(1)
+effect(() => console.log('x is', x()))
+x(2)  // logs 'x is 2'
+```
+
+Effects are automatically disposed when their owner scope is cleaned up (for example, when a component unmounts).
+
+#### `batch(fn)`
+
+Defers all signal notifications until `fn` returns, so multiple writes trigger only one downstream update.
+
+```js
+import { createSignal, createComputed, batch } from 'jsx'
+
+const a = createSignal(1)
+const b = createSignal(2)
+const sum = createComputed(() => a() + b())
+
+batch(() => {
+    a(10)
+    b(20)
+})
+// sum re-computes once, not twice
+```
+
+### Nesting Rules
+
+| Combination | Allowed | Notes |
+|---|---|---|
+| `signal → primitive` | Yes | Normal usage |
+| `signal → tree` | Yes | Signal controls which object; tree tracks its properties |
+| `signal → function` | Yes | Signal controls which computation to use |
+| `signal → signal` | No | Forbidden — `createSignal` returns the inner signal as-is |
+| `signal → computed` | Discouraged | Triggers a runtime warning; use the computed directly |
+
+### Utility Functions
+
+- **`isSignal(value)`** — returns `true` if `value` is a signal.
+- **`isComputed(value)`** — returns `true` if `value` is a computed.
+- **`isTree(value)`** — returns `true` if `value` is a reactive tree proxy.
+- **`toRaw(value)`** — unwraps a reactive tree proxy to its underlying plain object. Safe to call on non-proxy values (returns the value unchanged).
+- **`runUntracked(fn)`** — runs `fn` without registering any signal subscriptions. Useful when reading reactive state for a one-off value without creating a dependency.
+
+```js
+import { createTree, toRaw, isTree } from 'jsx'
+
+const state = createTree({ x: 1 })
+isTree(state)   // true
+toRaw(state)    // { x: 1 }
+```
+
 ## Getting Started
 
 ### Prerequisites

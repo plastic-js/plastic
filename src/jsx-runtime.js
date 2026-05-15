@@ -239,6 +239,18 @@ const JSX_PROP_MAP = {
 const MAX_REACTIVE_RESOLVE_STEPS = 16
 
 const resolveReactiveValue = (value)=> {
+	// In practice this loop resolves in at most 2 steps. The known chains are:
+	//   signal → primitive         (1 step)
+	//   computed → primitive       (1 step)
+	//   function → primitive       (1 step)
+	//   signal → tree              (1 step, tree is an object so the loop stops)
+	//   signal → function → value  (2 steps)
+	//   computed → function → value (2 steps)
+	// signal→signal is forbidden by createSignal; signal→computed triggers a warning.
+	// The loop is kept rather than hard-coding 2 steps because a function returning
+	// a function (e.g. const fn = () => () => 'red'; <div style={fn} />) is a grey
+	// area that the framework does not explicitly forbid, and silently mis-resolving
+	// it would be worse than the negligible cost of an extra iteration.
 	let resolved = value
 	let steps = 0
 
@@ -401,6 +413,9 @@ const applyClassNameMap = (element, classNameMap)=> {
 // Apply a className value to an element. Always reconciles against the
 // element's current classList so re-runs (e.g. via an enclosing binding
 // effect) drop tokens that disappeared from the new value.
+// NOTE: `value` must already be unwrapped before calling this function.
+// Do not pass signals, computeds, or accessor thunks — callers are
+// responsible for resolving reactive values via `resolveReactiveValue` first.
 const applyClassProp = (element, value)=> {
 	const expectedClass = toClassMap(value)
 	const actualClass = new Set(element.classList)
@@ -450,6 +465,9 @@ const clearStyleKey = (element, key)=> {
 	}
 }
 
+// NOTE: `value` must already be unwrapped before calling this function.
+// Do not pass signals, computeds, or accessor thunks — callers are
+// responsible for resolving reactive values via `resolveReactiveValue` first.
 const applyStyleProp = (element, value, prevValue)=> {
 	if (value == null || value === false){
 		element.style.cssText = ''

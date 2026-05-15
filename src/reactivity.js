@@ -57,7 +57,7 @@
  */
 
 import {
-	computed, effect, endBatch, getActiveSub, isComputed, isSignal, setActiveSub, signal, startBatch,
+	computed, effect, endBatch, getActiveSub, isComputed as originalIsComputed, isSignal as originalIsSignal, setActiveSub, signal, startBatch,
 } from 'alien-signals'
 import { isObject } from './utils.js'
 
@@ -73,6 +73,20 @@ const nonTrackableKeys = new Set([
 const builtInSymbols = new Set(Object.getOwnPropertyNames(Symbol)
 	.map(key=> Symbol[key])
 	.filter(symbol=> typeof symbol === 'symbol'))
+
+const isSignal = value=> {
+	if (typeof value === 'function' && originalIsSignal(value)){
+		return true
+	}
+	return false
+}
+
+const isComputed = value=> {
+	if (typeof value === 'function' && originalIsComputed(value)){
+		return true
+	}
+	return false
+}
 
 const isTrackableKey = (key)=> {
 	if (typeof key === 'symbol'){
@@ -342,8 +356,12 @@ const runUntracked = (fn)=> {
 }
 
 const createSignal = (value)=> {
-	if (typeof value === 'function' && isSignal(value)){
+	if (isSignal(value)){
 		return value
+	}
+
+	if (isComputed(value)){
+		console.warn('[reactivity] createSignal: wrapping a computed in a signal is redundant, use the computed directly.')
 	}
 
 	return signal(value)
