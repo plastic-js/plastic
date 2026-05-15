@@ -725,6 +725,9 @@ const flushPendingDescriptors = (root)=> {
 					return
 				}
 				const materialized = node2Element(descriptor)
+				if (materialized instanceof DocumentFragment && materialized[PENDING_DESCRIPTORS]){
+					flushPendingDescriptors(materialized)
+				}
 				placeholder.parentNode.replaceChild(materialized, placeholder)
 			})
 		}
