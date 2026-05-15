@@ -491,12 +491,17 @@ const setDomProp = (element, key, value)=> {
 	}
 
 	if (value == null || value === false){
-		const prev = key in element ? element[key] : ''
-		if (prev === '' && !element.hasAttribute(key)){
+		// Skip removal for aria-* when value is false — some ATs distinguish
+		// aria-hidden="false" (visible) from a missing attribute (also visible but unreliable),
+		// so we must keep the attribute present even when falsey.
+		if (!(value === false && typeof key === 'string' && key.startsWith('aria-'))){
+			const prev = key in element ? element[key] : ''
+			if (prev === '' && !element.hasAttribute(key)){
+				return
+			}
+			clearDomProp(element, key)
 			return
 		}
-		clearDomProp(element, key)
-		return
 	}
 
 	if (key in element){
