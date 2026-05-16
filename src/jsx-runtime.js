@@ -318,6 +318,14 @@ const createReactiveChildNode = (reactiveValue)=> {
 
 	createBindingEffect(()=> {
 		const nextNode = node2Element(resolveReactiveValue(reactiveValue))
+		// When the reactive value produced an array, node2Element returns a
+		// fragment with deferred component/thunk children. Flush them now before
+		// insertBefore drains the fragment — once drained, PENDING_DESCRIPTORS is
+		// unreachable. currentOwner is correctly set here because createBindingEffect
+		// restores the owner captured at creation time.
+		if (nextNode instanceof DocumentFragment && nextNode[PENDING_DESCRIPTORS]){
+			flushPendingDescriptors(nextNode)
+		}
 		const parent = end.parentNode
 		if (!parent){
 			return
@@ -694,12 +702,9 @@ const node2Element = (node)=> {
 	if (Array.isArray(node)){
 		const fragment = document.createDocumentFragment()
 		appendChildren(fragment, node)
-		// The fragment is about to be drained into a real parent (via
-		// insertBefore/appendChild). Once drained, its PENDING_DESCRIPTORS list
-		// is unreachable — the placeholders end up in a parent that never knew
-		// about them. Flush before returning so deferred descriptors materialize
-		// while we still hold the fragment.
-		flushPendingDescriptors(fragment)
+		// Do NOT flush here — the caller (appendChild) will transfer any pending
+		// descriptors to the real parent element before draining the fragment, so
+		// flushPendingDescriptors runs later with the correct owner active.
 		return fragment
 	}
 	return createPlaceholder()
@@ -749,13 +754,19 @@ const appendChild = (parent, child)=> {
 		return parent
 	}
 
-	// Defer component-descriptor children until the surrounding component owner
-	// is active. JS evaluates h() arguments eagerly, so without this the inner
-	// component would materialize under the *outer* component's owner, missing
-	// any context that the wrapping component sets in its body. Only defer when
-	// we're already inside a component scope (currentOwner set) — direct h()
-	// usage at the top of a script expects synchronous materialization.
-	if (isComponentDescriptor(child) && currentOwner != null && (parent instanceof Element || parent instanceof DocumentFragment)){
+	// Defer component-descriptor and reactive-thunk children until the
+	// surrounding component owner is active. JS evaluates h() arguments eagerly,
+	// so without this the inner component would materialize (or the reactive
+	// binding would capture its owner) under the *outer* component's owner,
+	// missing any context that the wrapping component sets in its body.
+	// Thunks (`typeof child === 'function') are reactive accessors injected by
+	// the babel reactive transform; they create a binding that captures
+	// currentOwner, so deferring them here ensures createReactiveChildNode runs
+	// later during flushPendingDescriptors with the correct owner active.
+	// Only defer when we're already inside a component scope (currentOwner set)
+	// — direct h() usage at the top of a script expects synchronous
+	// materialization.
+	if ((isComponentDescriptor(child) || typeof child === 'function') && currentOwner != null && (parent instanceof Element || parent instanceof DocumentFragment)){
 		const placeholder = document.createComment('pending')
 		parent.appendChild(placeholder)
 		const list = parent[PENDING_DESCRIPTORS] ?? (parent[PENDING_DESCRIPTORS] = [])
@@ -763,7 +774,43 @@ const appendChild = (parent, child)=> {
 		return parent
 	}
 
-	parent.appendChild(node2Element(child))
+	// When a native element is appended inside a component scope, it may carry
+	// pending component descriptors in its subtree that were deferred during
+	// eager h() construction. Flushing them now (via node2Element → flushPendingDescriptors)
+	// would materialize those descriptors under the current owner, which is
+	// the *outer* component — not the provider that will be set up later.
+	// Instead, bubble all pending descriptors from the element's subtree up to
+	// the parent so they get flushed by flushPendingDescriptors with the
+	// correct owner once the surrounding component finishes rendering.
+	if (child instanceof Element && currentOwner != null && (parent instanceof Element || parent instanceof DocumentFragment)){
+		const stack = [child]
+		while (stack.length){
+			const node = stack.pop()
+			const pending = node[PENDING_DESCRIPTORS]
+			if (pending){
+				node[PENDING_DESCRIPTORS] = undefined
+				const list = parent[PENDING_DESCRIPTORS] ?? (parent[PENDING_DESCRIPTORS] = [])
+				list.push(...pending)
+			}
+			for (const grandchild of node.childNodes){
+				if (grandchild instanceof Element) stack.push(grandchild)
+			}
+		}
+		parent.appendChild(child)
+		return parent
+	}
+
+	const childNode = node2Element(child)
+	// When the child resolved to a fragment that carries deferred component
+	// descriptors, transfer them to the real parent before draining so
+	// flushPendingDescriptors can find and materialize them later with the
+	// correct owner active (see the array branch in node2Element).
+	if (childNode instanceof DocumentFragment && childNode[PENDING_DESCRIPTORS] && (parent instanceof Element || parent instanceof DocumentFragment)){
+		const list = parent[PENDING_DESCRIPTORS] ?? (parent[PENDING_DESCRIPTORS] = [])
+		list.push(...childNode[PENDING_DESCRIPTORS])
+		childNode[PENDING_DESCRIPTORS] = undefined
+	}
+	parent.appendChild(childNode)
 	return parent
 }
 
