@@ -795,6 +795,8 @@ const {
 	getCurrentOwner,
 	registerCleanup,
 	batch,
+	appendChild,
+	flushPendingDescriptors,
 })
 
 // Thin runtime helper for <Dynamic component={tag} ...props />.

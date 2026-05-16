@@ -10,6 +10,8 @@ const createControlFlow = ({
 	renderInOwner,
 	getCurrentOwner,
 	registerCleanup,
+	appendChild,
+	flushPendingDescriptors,
 })=> {
 	// Reactively replaces DOM content after a comment anchor.
 	// getContent() is called inside a binding effect - any signals it reads
@@ -321,8 +323,19 @@ const createControlFlow = ({
 		const node = renderInOwner(owner, result ?? null)
 		setCurrentComputation(prevComp)
 
-		const portalNodes = node instanceof DocumentFragment ? [...node.childNodes] : [node]
-		target.appendChild(node)
+		const childCountBefore = target.childNodes.length
+
+		if (node instanceof DocumentFragment && appendChild){
+			appendChild(target, node)
+		} else {
+			target.appendChild(node)
+		}
+
+		if (flushPendingDescriptors){
+			flushPendingDescriptors(target)
+		}
+
+		const portalNodes = [...target.childNodes].slice(childCountBefore)
 
 		if (target.isConnected){
 			runOwnerMounts(owner)
