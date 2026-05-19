@@ -63,6 +63,28 @@ const runWithOwner = (owner, fn)=> {
 
 const renderInOwner = (owner, result)=> runWithOwner(owner, ()=> node2Element(result))
 
+// Reactive child updates can insert plain DOM wrappers that contain mounted
+// component roots deeper in the subtree, so walk the inserted nodes and run
+// any deferred owner mounts we find.
+const mountOwnedSubtree = (node)=> {
+	if (!(node instanceof Node)){
+		return
+	}
+
+	const stack = [node]
+	while (stack.length){
+		const current = stack.pop()
+		const owner = current[OWNER]
+		if (owner && !owner.mounted && current.isConnected){
+			runOwnerMounts(owner)
+		}
+
+		for (const child of current.childNodes){
+			stack.push(child)
+		}
+	}
+}
+
 const disposeOwner = (owner)=> {
 	if (owner.parent){
 		owner.parent.children.delete(owner)
@@ -357,9 +379,8 @@ const createReactiveChildNode = (reactiveValue)=> {
 		}
 
 		parent.insertBefore(nextNode, end)
-		const nodeOwner = nextNode[OWNER]
-		if (nodeOwner && !nodeOwner.mounted && start.isConnected){
-			runOwnerMounts(nodeOwner)
+		if (start.isConnected){
+			mountedNodes.forEach(node=> mountOwnedSubtree(node))
 		}
 	})
 

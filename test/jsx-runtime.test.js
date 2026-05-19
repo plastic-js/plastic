@@ -1020,6 +1020,38 @@ describe('onMount in reactive branches (regression: e0181d0)', ()=> {
 		expect(effectSpy).toHaveBeenCalledTimes(3)
 	})
 
+	it('runs nested component mounts for native nodes returned from function children', ()=> {
+		const show = createSignal(false)
+		const mountSpy = vi.fn()
+		const cleanupSpy = vi.fn()
+
+		const Nested = ()=> {
+			onMount(mountSpy)
+			onCleanup(cleanupSpy)
+			return h('button', { id: 'nested-child' }, 'Nested child')
+		}
+
+		const App = ()=> h('div', null, ()=> show() ? h('section', null, h(Nested)) : null)
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(App))
+
+		expect(mountSpy).toHaveBeenCalledTimes(0)
+		expect(cleanupSpy).toHaveBeenCalledTimes(0)
+
+		show(true)
+
+		expect(container.querySelector('#nested-child')).toBeInstanceOf(HTMLButtonElement)
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+		expect(cleanupSpy).toHaveBeenCalledTimes(0)
+
+		show(false)
+
+		expect(container.querySelector('#nested-child')).toBe(null)
+		expect(cleanupSpy).toHaveBeenCalledTimes(1)
+	})
+
 	it('does not leak signal reads in effect-level cleanup to enclosing effect', ()=> {
 		const effectSpy = vi.fn()
 		const show = createSignal(true)
