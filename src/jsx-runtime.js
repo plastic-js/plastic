@@ -957,6 +957,9 @@ const jsx = (tag, props, key)=> {
 	return h(tag, mergeProps(props, { key }))
 }
 const jsxs = jsx
+// jsxDEV is the development-mode variant used by automatic JSX transforms; the extra
+// debug arguments (isStaticChildren, source, self) are unused at runtime.
+const jsxDEV = (tag, props, key) => jsx(tag, props, key)
 
 // Render by appending the normalized root node into the target container.
 // Returns a disposer function that cleans up all effects and listeners.
@@ -991,6 +994,7 @@ export {
 	Fragment,
 	h,
 	jsx,
+	jsxDEV,
 	jsxs,
 	onMount,
 	onUnmount,
