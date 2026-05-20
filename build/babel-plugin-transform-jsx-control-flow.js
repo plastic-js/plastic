@@ -52,6 +52,8 @@
 const plugin = function(babel){
 	const { types: t } = babel
 
+	const isWhitespaceText = (child)=> t.isJSXText(child) && child.value.trim() === ''
+
 	// ---------------------------------------------------------------------------
 	// Helper: extract a JSX attribute's value as a plain Babel expression
 	// ---------------------------------------------------------------------------
@@ -83,6 +85,37 @@ const plugin = function(babel){
 		}
 
 		return undefined
+	}
+
+	// ---------------------------------------------------------------------------
+	// Helper: unwrap a slot element (<True>/<False>/<Case>/<Default>) down to its
+	// body expression. Slot tags are pure compile-time markers — they carry no
+	// state, no effects, and their runtime component (if it exists at all) would
+	// just `return props.children`. Emitting the wrapper into the output forces
+	// an extra jsx() call and a useless component instance on every branch
+	// activation, so we strip it here and return the children directly.
+	// A single meaningful child is returned as-is; multiple children are wrapped
+	// in a Fragment so the arrow function still has exactly one return value.
+	// ---------------------------------------------------------------------------
+
+	const unwrapSlotBody = (slotElement)=> {
+		const meaningful = slotElement.children.filter(c=> !isWhitespaceText(c))
+		if (meaningful.length === 0){
+			// Empty branch — render nothing rather than an empty marker element.
+			return t.nullLiteral()
+		}
+		if (meaningful.length === 1){
+			const only = meaningful[0]
+			// JSXText / JSXSpreadChild aren't valid standalone expressions; wrap.
+			if (t.isJSXText(only) || t.isJSXSpreadChild(only)){
+				return t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), [only])
+			}
+			if (t.isJSXExpressionContainer(only)){
+				return only.expression
+			}
+			return only
+		}
+		return t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), meaningful)
 	}
 
 	// ---------------------------------------------------------------------------
@@ -144,12 +177,15 @@ const plugin = function(babel){
 
 					if (!trueChild && !falseChild){ return }
 
+					// Strip the <True>/<False> marker and lift its body directly:
+					// the slot is syntactic, so the factory returns the children,
+					// not the marker element itself.
 					if (trueChild){
-						openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('trueBranch'), t.jsxExpressionContainer(t.arrowFunctionExpression([], trueChild))))
+						openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('trueBranch'), t.jsxExpressionContainer(t.arrowFunctionExpression([], unwrapSlotBody(trueChild)))))
 					}
 
 					if (falseChild){
-						openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('falseBranch'), t.jsxExpressionContainer(t.arrowFunctionExpression([], falseChild))))
+						openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('falseBranch'), t.jsxExpressionContainer(t.arrowFunctionExpression([], unwrapSlotBody(falseChild)))))
 					}
 
 					// Slot children are now represented as props; clear them.
@@ -188,6 +224,9 @@ const plugin = function(babel){
 				const caseObjects = caseChildren.map((caseChild)=> {
 					const whenAttribute = caseChild.openingElement.attributes.find(attribute=> t.isJSXAttribute(attribute) && t.isJSXIdentifier(attribute.name, { name: 'when' }))
 
+					// `branch` returns the Case body, not the <Case> element itself:
+					// `when` has already been hoisted onto this descriptor, so the
+					// marker tag carries no remaining runtime information.
 					const objectFields = [
 						t.objectProperty(t.identifier('branch'), t.arrowFunctionExpression([], caseChild)),
 					]
@@ -205,7 +244,8 @@ const plugin = function(babel){
 				}
 
 				if (defaultChild){
-					openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('defaultBranch'), t.jsxExpressionContainer(t.arrowFunctionExpression([], defaultChild))))
+					// Same unwrap as <Case>: <Default> is a marker, not a component.
+					openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('defaultBranch'), t.jsxExpressionContainer(t.arrowFunctionExpression([], unwrapSlotBody(defaultChild)))))
 				}
 
 				// Slot children are now represented as props; clear them.
