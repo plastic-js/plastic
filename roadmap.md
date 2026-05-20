@@ -58,6 +58,7 @@
 
 ## Babel Plugin for JSX Transformation
 - [X] Implement a Babel plugin to transform JSX ternary syntax into JavaScript function calls.
+- [ ] Runtime duplicate-attribute detection: the compile-time check in `transform-jsx-reactive` cannot see inside spread sources (their contents are dynamic). Add a `mergeProps`-level check that throws when a spread contributes a key already supplied by a named attribute on the same element. Honor the same whitelist as the compile-time check (`class`, `className`, `style`).
 
 ## Control Flow
 
@@ -79,6 +80,15 @@
 - [X] Support value-match style: `<Match value={x}><Case when="a">…</Case></Match>`.
 - [X] Extend Babel plugin to lazily wrap `<Case>`/`<Default>` children as factory props.
 - [X] Built on the same `mountDynamic` primitive as `<Either>`.
+
+### Structure Validation (TODO)
+- [ ] Control Flow Structure Validation:
+  - Parent components (e.g., For, Show, Switch, Match, Either, Loop, etc.) must validate their children at runtime to ensure:
+    - Only allowed child tags are present (e.g., For must have Each, Show must have When/Else, Match must have Case/Default, Either must have True/False, etc.).
+    - No foreign or unrelated components are present as children.
+  - Child components (e.g., When, Else, Each, Case, Default, True, False, etc.) must validate at runtime:
+    - They can only appear as direct children of their designated parent components (e.g., Switch, Show, For, Match, Either, Loop, etc.).
+  - If the structure is invalid, throw a clear error to help developers locate the problem.
 
 # Routing
 - [X] Implement a basic client-side router.
