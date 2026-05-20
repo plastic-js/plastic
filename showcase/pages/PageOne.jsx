@@ -1,4 +1,4 @@
-import { Link, Outlet } from '../../src/index.js'
+import { Link, Outlet } from '@plastic-js/plastic'
 
 const PageOne = ()=> (
 	<div className='checklist'>
