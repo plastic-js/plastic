@@ -16,11 +16,11 @@
 //   - `ref` and `onXxx` event handlers: last source wins (matches Solid).
 //   - The proxy is read-only: writes throw.
 
+import { isPlainObject } from './utils.js'
+
 const CLASS_KEYS = ['class', 'className']
 const STYLE_KEYS = ['style']
 const MAX_MERGE_VALUE_RESOLVE_STEPS = 16
-
-const isPlainObject = value=> value != null && typeof value === 'object' && !Array.isArray(value)
 
 const normalizeClassValue = (value)=> {
 	if (value == null || value === false || value === ''){

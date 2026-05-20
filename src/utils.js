@@ -2,6 +2,8 @@ const isObject = (value)=> {
 	return value !== null && typeof value === 'object'
 }
 
+const isPlainObject = value=> value != null && typeof value === 'object' && !Array.isArray(value)
+
 const flattenChildren = children=> children.flat(Infinity)
 
 const isEventProp = key=> (/^on[A-Za-z]/).test(key)
@@ -40,6 +42,7 @@ const toClassMap = (value)=> {
 
 export {
 	isObject,
+	isPlainObject,
 	flattenChildren,
 	isEventProp,
 	normalizeTextNodeValue,
