@@ -349,6 +349,19 @@ describe('jsx runtime static rendering', ()=> {
 		expect(element.textContent).toBe('')
 	})
 
+	it('replaces nested dynamic component output instead of leaving stale DOM behind', ()=> {
+		const current = createSignal('Alpha')
+		const Page = ({ label })=> ()=> h('section', null, h('h1', null, label))
+		const App = ()=> h('main', null, ()=> h(Page, { label: current }))
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+		expect([...container.querySelectorAll('h1')].map(node=> node.textContent)).toEqual(['Alpha'])
+
+		current('Beta')
+		expect([...container.querySelectorAll('h1')].map(node=> node.textContent)).toEqual(['Beta'])
+	})
+
 	it('updates style from a reactive string and clears on null', ()=> {
 		const styleStr = createSignal('color: red')
 		const element = h('div', {
@@ -654,6 +667,19 @@ describe('context api', ()=> {
 		expect(container.textContent).toBe('dark')
 	})
 
+	it('lets Provider establish context for eager children wrapped in a native element', ()=> {
+		const ThemeContext = createContext('light')
+		const Label = ()=> h('span', null, useContext(ThemeContext))
+		const App = ()=> h(ThemeContext.Provider, {
+			value: 'dark',
+		}, h('div', null, h(Label)))
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+
+		expect(container.textContent).toBe('dark')
+	})
+
 	it('supports nested Provider override', ()=> {
 		const ThemeContext = createContext('light')
 		const Label = ()=> h('span', null, useContext(ThemeContext))
@@ -669,6 +695,23 @@ describe('context api', ()=> {
 		renderApp(container, h(App))
 
 		expect(container.textContent).toBe('outerinner')
+	})
+
+	it('preserves Provider context for function children rendered inside DOM nodes', ()=> {
+		const ThemeContext = createContext('light')
+		const theme = createSignal('dark')
+		const Label = ()=> h('span', null, useContext(ThemeContext))
+		const App = ()=> h(ThemeContext.Provider, {
+			value: theme,
+			children: ()=> h('div', null, ()=> h(Label)),
+		})
+		const container = document.createElement('div')
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('dark')
+
+		theme('contrast')
+		expect(container.textContent).toBe('contrast')
 	})
 
 	it('allows reactive values to flow through context', ()=> {
@@ -811,6 +854,18 @@ describe('lifecycle & cleanup management', ()=> {
 		expect(container.childNodes).toHaveLength(0)
 	})
 
+	it('renderApp disposer removes fragment-root component output', ()=> {
+		const Page = ({ label })=> ()=> h('h1', null, label)
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const dispose = renderApp(container, h(Page, { label: 'content' }))
+		expect(container.textContent).toBe('content')
+
+		dispose()
+		expect(container.childNodes).toHaveLength(0)
+	})
+
 	it('event listener cleanup removes listeners on dispose', ()=> {
 		const onClick = vi.fn()
 		const Component = ()=> h('button', { onClick }, 'Click')
@@ -919,6 +974,152 @@ describe('lifecycle & cleanup management', ()=> {
 
 		dispose()
 		expect(cleaned).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe('memory leak prevention (long mount/unmount cycles, listeners)', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('repeated mount/unmount does not accumulate cleanups or DOM nodes', ()=> {
+		const mountSpy = vi.fn()
+		const cleanupSpy = vi.fn()
+
+		const Component = ()=> {
+			onMount(mountSpy)
+			onCleanup(cleanupSpy)
+			return h('div', null, 'content')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const CYCLES = 200
+		for (let i = 0; i < CYCLES; i++){
+			const dispose = renderApp(container, h(Component))
+			expect(container.childNodes).toHaveLength(1)
+			dispose()
+			expect(container.childNodes).toHaveLength(0)
+		}
+
+		expect(mountSpy).toHaveBeenCalledTimes(CYCLES)
+		expect(cleanupSpy).toHaveBeenCalledTimes(CYCLES)
+	})
+
+	it('event listeners are removed across many mount/unmount cycles', ()=> {
+		const target = document.createElement('div')
+		document.body.appendChild(target)
+		const addSpy = vi.spyOn(target, 'addEventListener')
+		const removeSpy = vi.spyOn(target, 'removeEventListener')
+
+		const onClick = vi.fn()
+		// Attach the handler to an existing DOM node via applyProps semantics:
+		// render a component that mounts a button whose listener is attached on
+		// the captured `target` element through addEventListener directly.
+		const Component = ()=> {
+			onMount(()=> target.addEventListener('click', onClick))
+			onCleanup(()=> target.removeEventListener('click', onClick))
+			return h('span', null, 'x')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const CYCLES = 100
+		for (let i = 0; i < CYCLES; i++){
+			const dispose = renderApp(container, h(Component))
+			dispose()
+		}
+
+		expect(addSpy).toHaveBeenCalledTimes(CYCLES)
+		expect(removeSpy).toHaveBeenCalledTimes(CYCLES)
+
+		// After all cycles, clicking should not invoke any leftover listener.
+		target.click()
+		expect(onClick).not.toHaveBeenCalled()
+
+		addSpy.mockRestore()
+		removeSpy.mockRestore()
+	})
+
+	it('jsx onClick listeners are removed on every dispose (no accumulation)', ()=> {
+		const onClick = vi.fn()
+		const Component = ()=> h('button', { onClick }, 'go')
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const CYCLES = 50
+		for (let i = 0; i < CYCLES; i++){
+			const dispose = renderApp(container, h(Component))
+			const button = container.querySelector('button')
+			button.click()
+			dispose()
+		}
+
+		// Each cycle dispatches exactly one click; if listeners leaked across
+		// cycles, the count would grow super-linearly.
+		expect(onClick).toHaveBeenCalledTimes(CYCLES)
+	})
+
+	it('nested children cleanups all run on each unmount cycle', ()=> {
+		const childCleanup = vi.fn()
+		const parentCleanup = vi.fn()
+
+		const Child = ()=> {
+			onCleanup(childCleanup)
+			return h('span', null, 'c')
+		}
+		const Parent = ()=> {
+			onCleanup(parentCleanup)
+			return h('div', null, h(Child), h(Child), h(Child))
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const CYCLES = 50
+		for (let i = 0; i < CYCLES; i++){
+			const dispose = renderApp(container, h(Parent))
+			dispose()
+		}
+
+		expect(parentCleanup).toHaveBeenCalledTimes(CYCLES)
+		expect(childCleanup).toHaveBeenCalledTimes(CYCLES * 3)
+	})
+
+	it('window event listeners registered in components are removed on dispose', ()=> {
+		const addSpy = vi.spyOn(window, 'addEventListener')
+		const removeSpy = vi.spyOn(window, 'removeEventListener')
+
+		const handler = vi.fn()
+		const Component = ()=> {
+			window.addEventListener('resize', handler)
+			onCleanup(()=> window.removeEventListener('resize', handler))
+			return h('div', null, 'x')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+
+		const CYCLES = 30
+		for (let i = 0; i < CYCLES; i++){
+			const dispose = renderApp(container, h(Component))
+			dispose()
+		}
+
+		const adds = addSpy.mock.calls.filter(([type])=> type === 'resize').length
+		const removes = removeSpy.mock.calls.filter(([type])=> type === 'resize').length
+		expect(adds).toBe(CYCLES)
+		expect(removes).toBe(CYCLES)
+
+		// Dispatching after all disposes: handler should not fire.
+		window.dispatchEvent(new Event('resize'))
+		expect(handler).not.toHaveBeenCalled()
+
+		addSpy.mockRestore()
+		removeSpy.mockRestore()
 	})
 })
 

@@ -14,6 +14,7 @@ import {
 	Route,
 	Router,
 	h,
+	lazy,
 	renderApp,
 	useLocation,
 	useMatch,
@@ -46,6 +47,43 @@ describe('router', ()=> {
 		window.history.replaceState(null, '', '/')
 		window.dispatchEvent(new PopStateEvent('popstate'))
 		expect(container.textContent).toBe('Home')
+	})
+
+	it('logs lazy import failures instead of swallowing them silently', async ()=> {
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const failure = new Error('lazy load failed')
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(()=> {})
+		const LazyPage = lazy(()=> Promise.reject(failure), {
+			fallback: ()=> h('p', null, 'Loading...'),
+		})
+
+		renderApp(container, h(LazyPage))
+		expect(container.textContent).toBe('Loading...')
+
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(consoleError).toHaveBeenCalledWith(failure)
+		consoleError.mockRestore()
+	})
+
+	it('renders a lazy component after its import resolves', async ()=> {
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const LazyPage = lazy(()=> Promise.resolve({
+			default: ()=> h('p', null, 'Loaded page'),
+		}), {
+			fallback: ()=> h('p', null, 'Loading...'),
+		})
+
+		renderApp(container, h(LazyPage))
+		expect(container.textContent).toBe('Loading...')
+
+		await Promise.resolve()
+		await Promise.resolve()
+
+		expect(container.textContent).toBe('Loaded page')
 	})
 
 	it('intercepts Link clicks and updates the active route', ()=> {
@@ -590,6 +628,32 @@ describe('router', ()=> {
 
 			expect(window.location.pathname).toBe('/settings/security')
 			expect(container.textContent).toContain('Security page')
+		})
+	})
+
+	describe('memory leak prevention', ()=> {
+		it('removes popstate listener on dispose and across repeated mounts', ()=> {
+			const addSpy = vi.spyOn(window, 'addEventListener')
+			const removeSpy = vi.spyOn(window, 'removeEventListener')
+
+			const App = ()=> h(Router, null, h(Route, { path: '/' }, h('p', null, 'Home')))
+
+			const CYCLES = 20
+			for (let i = 0; i < CYCLES; i++){
+				const container = document.createElement('div')
+				document.body.appendChild(container)
+				const dispose = renderApp(container, h(App))
+				dispose()
+				container.remove()
+			}
+
+			const adds = addSpy.mock.calls.filter(([type])=> type === 'popstate').length
+			const removes = removeSpy.mock.calls.filter(([type])=> type === 'popstate').length
+			expect(adds).toBe(CYCLES)
+			expect(removes).toBe(CYCLES)
+
+			addSpy.mockRestore()
+			removeSpy.mockRestore()
 		})
 	})
 })
