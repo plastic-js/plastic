@@ -4,8 +4,8 @@ import babel from 'vite-plugin-babel'
 import react from '@vitejs/plugin-react'
 import vue from '@vitejs/plugin-vue'
 import solid from 'vite-plugin-solid'
-import babelReactive from '../build/babel-plugin-transform-jsx-reactive.js'
-import babelControlFlow from '../build/babel-plugin-transform-jsx-control-flow.js'
+import babelReactive from 'babel-preset-plastic/reactive'
+import babelControlFlow from 'babel-preset-plastic/control-flow'
 
 const here = path.resolve(__dirname)
 
@@ -22,7 +22,7 @@ export default defineConfig({
 			filter: plasticFilter,
 			babelConfig: {
 				presets: [
-					['@babel/preset-react', { runtime: 'automatic', importSource: '@zzznpm/plastic' }],
+					['@babel/preset-react', { runtime: 'automatic', importSource: '@plastic-js/plastic' }],
 				],
 				plugins: [babelControlFlow, babelReactive],
 			},
@@ -33,8 +33,8 @@ export default defineConfig({
 	],
 	resolve: {
 		alias: {
-			'@zzznpm/plastic/jsx-runtime': path.resolve(here, '../src/jsx-runtime.js'),
-			'@zzznpm/plastic': path.resolve(here, '../src/index.js'),
+			'@plastic-js/plastic/jsx-runtime': path.resolve(here, '../src/jsx-runtime.js'),
+			'@plastic-js/plastic': path.resolve(here, '../src/index.js'),
 		},
 	},
 	server: { port: 4173 },
