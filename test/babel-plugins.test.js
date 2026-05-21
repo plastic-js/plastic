@@ -441,6 +441,54 @@ describe('babel plugin: ternary lazy transform', ()=> {
 		expect(code).not.toContain('children: () =>')
 	})
 
+	it('emits a JSX element used as an attribute value as a getter and rewrites the inner element', ()=> {
+		const source = `
+			const view = <Foo bar={<Sub/>} />
+		`
+
+		const transformed = transformSync(source, {
+			configFile: false,
+			babelrc: false,
+			presets: [[
+				'@babel/preset-react',
+				{
+					runtime: 'automatic',
+					importSource: 'plastic',
+				},
+			]],
+			plugins: [transformReactivePlugin],
+		})
+
+		const code = transformed?.code ?? ''
+
+		expect(code).toContain('get bar()')
+		expect(code).toContain('jsx(Sub,')
+	})
+
+	it('emits a non-empty JSX fragment used as an attribute value as a getter and rewrites the inner fragment', ()=> {
+		const source = `
+			const view = <Foo bar={<>x</>} />
+		`
+
+		const transformed = transformSync(source, {
+			configFile: false,
+			babelrc: false,
+			presets: [[
+				'@babel/preset-react',
+				{
+					runtime: 'automatic',
+					importSource: 'plastic',
+				},
+			]],
+			plugins: [transformReactivePlugin],
+		})
+
+		const code = transformed?.code ?? ''
+
+		expect(code).toContain('get bar()')
+		expect(code).toContain('Fragment')
+	})
+
 	it('does not wrap literal children (number, string, null)', ()=> {
 		const source = `
 			const view = <div>{123}{"text"}{null}</div>

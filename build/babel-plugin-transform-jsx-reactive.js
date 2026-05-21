@@ -269,24 +269,30 @@ const plugin = function(babel){
 		return attr.value
 	}
 
+	// Attribute names that are allowed to appear more than once on the same
+	// element — `mergeProps` has dedicated merge rules for class/style, so
+	// duplicates are intentional usage, not author error.
+	const DUPLICATE_ALLOWED_ATTRS = new Set(['class', 'className', 'style'])
+
 	// Construct an ObjectExpression from a list of JSXAttributes (non-spread),
-	// plus an optional synthetic `children` source. Duplicate attribute names
-	// (e.g. `<div class="a" class={x}>`) throw a compile-time error, matching
-	// Vue and Svelte compilers.
-	const buildObjectExpression = (jsxAttrs, syntheticChildren, parentTagName, file)=> {
+	// plus an optional synthetic `children` source. `seenNames` is owned by the
+	// caller (`buildMergePropsArgs`) so duplicate detection spans the entire
+	// element, not just one consecutive non-spread group.
+	const buildObjectExpression = (jsxAttrs, syntheticChildren, parentTagName, file, seenNames)=> {
 		const properties = []
-		const seenNames = new Map()
 
 		for (const attr of jsxAttrs){
 			const { key, name } = jsxNameToKey(attr.name)
 
-			if (seenNames.has(name)){
-				const filename = file?.opts?.filename ?? '<unknown>'
-				const loc = attr.loc?.start
-				const where = loc ? `${filename}:${loc.line}:${loc.column}` : filename
-				throw new Error(`[transform-jsx-reactive] duplicate attribute "${name}" on <${parentTagName ?? '?'}> at ${where}`)
+			if (!DUPLICATE_ALLOWED_ATTRS.has(name)){
+				if (seenNames.has(name)){
+					const filename = file?.opts?.filename ?? '<unknown>'
+					const loc = attr.loc?.start
+					const where = loc ? `${filename}:${loc.line}:${loc.column}` : filename
+					throw new Error(`[transform-jsx-reactive] duplicate attribute "${name}" on <${parentTagName ?? '?'}> at ${where}`)
+				}
+				seenNames.set(name, true)
 			}
-			seenNames.set(name, true)
 
 			const value = jsxAttrValueToExpression(attr)
 
@@ -321,6 +327,11 @@ const plugin = function(babel){
 	// ObjectExpression while spreads remain positional. Children are attached
 	// to the trailing object group (creating one if necessary).
 	const buildMergePropsArgs = (jsxAttrs, jsxChildren, parentTagName, file)=> {
+		// Element-scoped duplicate tracking: shared across every object group on
+		// this element so a spread sitting between two same-named attrs cannot
+		// hide the duplication. Spreads themselves don't contribute names (their
+		// contents are dynamic and resolved at runtime by `mergeProps`).
+		const seenNames = new Map()
 		const groups = []
 		for (const attr of jsxAttrs){
 			if (t.isJSXSpreadAttribute(attr)){
@@ -357,7 +368,7 @@ const plugin = function(babel){
 				}
 				return t.arrowFunctionExpression([], group.node)
 			}
-			return buildObjectExpression(group.attrs, group.syntheticChildren, parentTagName, file)
+			return buildObjectExpression(group.attrs, group.syntheticChildren, parentTagName, file, seenNames)
 		})
 	}
 
@@ -494,7 +505,7 @@ const plugin = function(babel){
 
 				const propsExpr = meaningfulChildren.length === 0
 					? t.objectExpression([])
-					: buildObjectExpression([], meaningfulChildren, null, null)
+					: buildObjectExpression([], meaningfulChildren, null, null, new Map())
 
 				const jsxId = ensureRuntimeImport(path, 'jsx')
 				const fragmentId = ensureRuntimeImport(path, 'Fragment')

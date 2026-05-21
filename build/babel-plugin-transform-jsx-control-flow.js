@@ -52,7 +52,8 @@
 const plugin = function(babel){
 	const { types: t } = babel
 
-	const isWhitespaceText = (child)=> t.isJSXText(child) && child.value.trim() === ''
+	const isEmptyExpressionContainer = (child)=> t.isJSXExpressionContainer(child) && t.isJSXEmptyExpression(child.expression)
+	const isWhitespaceText = (child)=> (t.isJSXText(child) && child.value.trim() === '') || isEmptyExpressionContainer(child)
 
 	// ---------------------------------------------------------------------------
 	// Helper: extract a JSX attribute's value as a plain Babel expression
@@ -88,8 +89,8 @@ const plugin = function(babel){
 	}
 
 	// ---------------------------------------------------------------------------
-	// Helper: unwrap a slot element (<True>/<False>/<Case>/<Default>) down to its
-	// body expression. Slot tags are pure compile-time markers — they carry no
+	// Helper: unwrap a slot element (<True>/<False>/<Default>) down to its
+	// body expression, but <Case> is different from them. Slot tags are pure compile-time markers — they carry no
 	// state, no effects, and their runtime component (if it exists at all) would
 	// just `return props.children`. Emitting the wrapper into the output forces
 	// an extra jsx() call and a useless component instance on every branch
@@ -135,7 +136,7 @@ const plugin = function(babel){
 				if (
 					t.isJSXMemberExpression(openingElement.name) && t.isJSXIdentifier(openingElement.name.property, { name: 'Provider' })
 				){
-					const meaningfulChildren = children.filter(child=> !(t.isJSXText(child) && child.value.trim() === ''))
+					const meaningfulChildren = children.filter(child=> !isWhitespaceText(child))
 
 					if (meaningfulChildren.length > 0){
 						// Drop any existing `children` prop to stay idempotent.
@@ -242,7 +243,7 @@ const plugin = function(babel){
 					const whenAttribute = caseChild.openingElement.attributes.find(attribute=> t.isJSXAttribute(attribute) && t.isJSXIdentifier(attribute.name, { name: 'when' }))
 					const whenValue = getAttributeValue(whenAttribute)
 
-					// `when` has been hoisted onto this descriptor(Either); strip it from the
+					// `when` has been hoisted onto this descriptor(Match); strip it from the
 					// <Case> wrapper so reactive doesn't emit a useless getter for it.
 					caseChild.openingElement.attributes = caseChild.openingElement.attributes.filter(attribute=> attribute !== whenAttribute)
 
