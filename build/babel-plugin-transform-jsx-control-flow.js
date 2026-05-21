@@ -147,8 +147,25 @@ const plugin = function(babel){
 							return attribute.name.name !== 'children'
 						})
 
-						// Collapse multiple children into a fragment when needed.
-						const body = meaningfulChildren.length === 1 ? meaningfulChildren[0] : t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), meaningfulChildren)
+						// Collapse children into a single arrow-body expression. A lone
+						// JSXElement/JSXFragment can stand alone; a lone JSXExpressionContainer
+						// is unwrapped to its inner expression; anything else (JSXText,
+						// JSXSpreadChild, or multiple children) must be wrapped in a
+						// Fragment, since JSXText/JSXSpreadChild are not valid Expression
+						// nodes on their own.
+						let body
+						if (meaningfulChildren.length === 1){
+							const only = meaningfulChildren[0]
+							if (t.isJSXElement(only) || t.isJSXFragment(only)){
+								body = only
+							} else if (t.isJSXExpressionContainer(only)){
+								body = only.expression
+							} else {
+								body = t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), [only])
+							}
+						} else {
+							body = t.jsxFragment(t.jsxOpeningFragment(), t.jsxClosingFragment(), meaningfulChildren)
+						}
 
 						openingElement.attributes.push(t.jsxAttribute(t.jsxIdentifier('children'), t.jsxExpressionContainer(t.arrowFunctionExpression([], body))))
 
