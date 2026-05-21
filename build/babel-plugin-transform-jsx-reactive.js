@@ -256,7 +256,10 @@ const plugin = function(babel){
 		}
 		if (t.isJSXExpressionContainer(attr.value)){
 			if (t.isJSXEmptyExpression(attr.value.expression)){
-				return t.identifier('undefined')
+				// Use `void 0` rather than the `undefined` identifier: in non-strict
+				// scopes `undefined` can be shadowed by a local binding, while
+				// `void 0` always evaluates to the real undefined value.
+				return t.unaryExpression('void', t.numericLiteral(0))
 			}
 			return attr.value.expression
 		}

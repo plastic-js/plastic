@@ -223,15 +223,16 @@ const plugin = function(babel){
 				// `when` carries the case predicate value for the runtime to test.
 				const caseObjects = caseChildren.map((caseChild)=> {
 					const whenAttribute = caseChild.openingElement.attributes.find(attribute=> t.isJSXAttribute(attribute) && t.isJSXIdentifier(attribute.name, { name: 'when' }))
+					const whenValue = getAttributeValue(whenAttribute)
 
-					// `branch` returns the Case body, not the <Case> element itself:
-					// `when` has already been hoisted onto this descriptor, so the
-					// marker tag carries no remaining runtime information.
+					// `when` has been hoisted onto this descriptor(Either); strip it from the
+					// <Case> wrapper so reactive doesn't emit a useless getter for it.
+					caseChild.openingElement.attributes = caseChild.openingElement.attributes.filter(attribute=> attribute !== whenAttribute)
+
 					const objectFields = [
 						t.objectProperty(t.identifier('branch'), t.arrowFunctionExpression([], caseChild)),
 					]
 
-					const whenValue = getAttributeValue(whenAttribute)
 					if (whenValue){
 						objectFields.push(t.objectProperty(t.identifier('when'), whenValue))
 					}
