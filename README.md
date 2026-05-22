@@ -86,6 +86,32 @@ Plastic's `mergeProps` shares the same surface API as Solid's but differs in thr
 
 `class` and `style` receive additive merging so host components can contribute tokens and styles alongside the consumer's without clobbering. `ref` and `onXxx` follow Solid's last-wins rule.
 
+#### `class` Merging: Plastic vs. Solid
+
+Plastic and Solid diverge significantly on how `class` / `className` is resolved when multiple sources are present:
+
+- **Solid** has two distinct modes selected at compile time:
+  - *Merging mode* (no spread present): static and dynamic class attributes are concatenated into a single space-separated string.
+  - *Assignment mode* (any spread present): the compiler switches to sequential `element.className = value` assignment, so the **last** class-bearing prop or spread wins and any earlier class declarations are overwritten.
+- **Plastic** has only one mode: the Babel plugin hands every attribute — static, dynamic, and spread alike — to the runtime `mergeProps` unchanged, and `mergeProps` performs the merge. All three source types are concatenated additively, and each source's value may itself be either a string or an object (e.g. `{ foo: true, bar: isActive() }`); both forms are normalized and merged into the final class list.
+
+In short: introducing a spread in Solid can silently erase previously declared classes; in Plastic the same code keeps all contributions and combines them. This makes host components' class contributions safe under composition without the consumer having to know whether spreads are involved downstream.
+
+### Duplicate Attribute Detection
+
+The Babel plugin rejects duplicate attribute names on the same JSX element at **compile time**, so typos and accidental overrides surface as build errors rather than silent last-wins behaviour at runtime.
+
+- **Scope is the element itself**, not a syntactic group. Detection spans every attribute on the opening tag regardless of `static` / dynamic / spread interleaving — a spread sitting between two same-named attributes does not hide the duplicate. Children are not part of the scope; nested elements have their own independent check.
+- **Spreads do not contribute names.** Their contents are dynamic and resolved by `mergeProps` at runtime, so they cannot be statically diffed against named attributes.
+- **Whitelist: `class`, `className`, `style`.** These keys have first-class additive merge semantics in `mergeProps` (see the table above), so repeating them is a legitimate composition pattern, not author error.
+
+```jsx
+<div id="a" id={dynamic} />                  // ❌ compile error: duplicate "id"
+<div id="a" {...rest} id={dynamic} />        // ❌ compile error: still duplicate
+<div class="a" class={dynamic} />            // ✅ class is whitelisted
+<div class="a" {...rest} class={dynamic} />  // ✅ both contributions are merged
+```
+
 ## Lifecycle Semantics
 
 - `onMount` callbacks run in **child-first** order for nested component trees.
@@ -215,6 +241,45 @@ toRaw(state)    // { x: 1 }
 
 - Node.js 18+
 - npm 9+
+
+### Installation
+
+Install Plastic together with its Babel toolchain. Plastic's JSX compiles in two stages: `@babel/preset-react` turns JSX into `jsx(...)` calls against Plastic's runtime, then `babel-preset-plastic` rewrites those calls for fine-grained reactivity (control-flow lifting, `mergeProps`, etc.).
+
+```bash
+npm install @plastic-js/plastic
+npm install --save-dev \
+    @babel/core \
+    @babel/preset-react \
+    babel-preset-plastic \
+    vite-plugin-babel
+```
+
+Then wire the presets up in `vite.config.js`:
+
+```js
+import { defineConfig } from 'vite'
+import babel from 'vite-plugin-babel'
+import plasticJsx from 'babel-preset-plastic'
+
+export default defineConfig({
+    plugins: [
+        babel({
+            babelConfig: {
+                presets: [
+                    ['@babel/preset-react', {
+                        runtime: 'automatic',
+                        importSource: '@plastic-js/plastic',
+                    }],
+                    plasticJsx,
+                ],
+            },
+        }),
+    ],
+})
+```
+
+The `importSource: '@plastic-js/plastic'` option points the JSX runtime at Plastic instead of React, so `jsx`/`jsxs`/`Fragment` are imported from `@plastic-js/plastic/jsx-runtime`.
 
 ## Routing
 
