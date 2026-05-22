@@ -57,8 +57,16 @@
  */
 
 import {
-	computed, effect, endBatch, getActiveSub, isComputed as originalIsComputed, isSignal as originalIsSignal, setActiveSub, signal, startBatch,
+	computed, effect as originalEffect, endBatch, getActiveSub, isComputed as originalIsComputed, isSignal as originalIsSignal, setActiveSub, signal, startBatch,
 } from 'alien-signals'
+
+// alien-signals 3.x treats the effect callback's return value as a cleanup
+// function. Most callers return non-function values (e.g. `log.push(x)` →
+// number), which crash on re-run. Discard non-function returns.
+const effect = (fn)=> originalEffect(()=> {
+	const result = fn()
+	return typeof result === 'function' ? result : undefined
+})
 import { isObject } from './utils.js'
 
 const RAW = Symbol('raw')
