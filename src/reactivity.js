@@ -57,13 +57,13 @@
  */
 
 import {
-	computed, effect as originalEffect, endBatch, getActiveSub, isComputed as originalIsComputed, isSignal as originalIsSignal, setActiveSub, signal, startBatch,
+	computed, endBatch, getActiveSub, effect as originalEffect, isComputed as originalIsComputed, isSignal as originalIsSignal, setActiveSub, signal, startBatch,
 } from 'alien-signals'
 
 // alien-signals 3.x treats the effect callback's return value as a cleanup
 // function. Most callers return non-function values (e.g. `log.push(x)` →
 // number), which crash on re-run. Discard non-function returns.
-const effect = (fn)=> originalEffect(()=> {
+const effect = fn=> originalEffect(()=> {
 	const result = fn()
 	return typeof result === 'function' ? result : undefined
 })
@@ -82,14 +82,14 @@ const builtInSymbols = new Set(Object.getOwnPropertyNames(Symbol)
 	.map(key=> Symbol[key])
 	.filter(symbol=> typeof symbol === 'symbol'))
 
-const isSignal = value=> {
+const isSignal = (value)=> {
 	if (typeof value === 'function' && originalIsSignal(value)){
 		return true
 	}
 	return false
 }
 
-const isComputed = value=> {
+const isComputed = (value)=> {
 	if (typeof value === 'function' && originalIsComputed(value)){
 		return true
 	}

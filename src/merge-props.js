@@ -76,11 +76,11 @@ const mergeStyleValues = (values)=> {
 	return result
 }
 
-
 // Sources can be either plain objects or zero-arg functions ("thunks") that
 // the Babel plugin emits for dynamic spread sources like `{...api()}`. The
 // thunk is invoked on every access so signal reads inside `api()` are tracked
 // by whatever effect is currently consuming the proxy.
+// eslint-disable-next-line @stylistic/js/no-confusing-arrow
 const resolveSource = source=> typeof source === 'function' ? source() : source
 
 const collectPresentKeys = (source, keys)=> {
@@ -235,13 +235,13 @@ export const mergeProps = (...sources)=> {
 	// effect entirely. This is the common case under the babel reactive transform
 	// which wraps every JSX in mergeProps even when there are no spreads.
 	let hasStaticKeys = true
-	for (let i = 0; i < sources.length; i += 1){
-		if (typeof sources[i] === 'function'){ hasStaticKeys = false; break }
+	for (const source of sources){
+		if (typeof source === 'function'){ hasStaticKeys = false; break }
 	}
 	return new Proxy({}, {
 		get: (_, key)=> {
-			if (key === IS_MERGED_PROPS) return true
-			if (key === HAS_STATIC_KEYS) return hasStaticKeys
+			if (key === IS_MERGED_PROPS){ return true }
+			if (key === HAS_STATIC_KEYS){ return hasStaticKeys }
 			return resolveKey(sources, key)
 		},
 		has: (_, key)=> hasKey(sources, key),
@@ -261,5 +261,5 @@ export const mergeProps = (...sources)=> {
 	})
 }
 
-export const isMergedProps = (value)=> value != null && typeof value === 'object' && value[IS_MERGED_PROPS] === true
-export const hasMergedPropsStaticKeys = (value)=> value != null && typeof value === 'object' && value[HAS_STATIC_KEYS] === true
+export const isMergedProps = value=> value != null && typeof value === 'object' && value[IS_MERGED_PROPS] === true
+export const hasMergedPropsStaticKeys = value=> value != null && typeof value === 'object' && value[HAS_STATIC_KEYS] === true

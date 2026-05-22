@@ -8,7 +8,7 @@ const readOnlyTrap = ()=> {
 }
 
 const createSplitProxy = (source, predicate)=> new Proxy({}, {
-	get: (_, key)=> (predicate(key) ? source[key] : undefined),
+	get: (_, key)=> predicate(key) ? source[key] : undefined,
 	has: (_, key)=> predicate(key) && key in source,
 	ownKeys: ()=> Reflect.ownKeys(source).filter(predicate),
 	getOwnPropertyDescriptor: (_, key)=> {
@@ -29,10 +29,10 @@ export const splitProps = (props, ...keyGroups)=> {
 	const claimed = new Set()
 	const groups = keyGroups.map((keys)=> {
 		const keySet = new Set(keys)
-		keys.forEach((key)=> claimed.add(key))
-		return createSplitProxy(props, (key)=> keySet.has(key))
+		keys.forEach(key=> claimed.add(key))
+		return createSplitProxy(props, key=> keySet.has(key))
 	})
-	const rest = createSplitProxy(props, (key)=> !claimed.has(key))
+	const rest = createSplitProxy(props, key=> !claimed.has(key))
 	return [...groups, rest]
 }
 

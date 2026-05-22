@@ -67,7 +67,7 @@ const renderInOwner = (owner, result)=> runWithOwner(owner, ()=> node2Element(re
 // Reactive child updates can insert plain DOM wrappers that contain mounted
 // component roots deeper in the subtree, so walk the inserted nodes and run
 // any deferred owner mounts we find.
-const mountOwnedSubtree = (node, {force = false} = {})=> {
+const mountOwnedSubtree = (node, { force = false } = {})=> {
 	if (!(node instanceof Node)){
 		return
 	}
@@ -110,7 +110,7 @@ const disposeOwner = (owner)=> {
 	if (owner.effects){
 		for (let i = owner.effects.length - 1; i >= 0; i -= 1){
 			const stop = owner.effects[i]
-			if (typeof stop === 'function') stop()
+			if (typeof stop === 'function'){ stop() }
 		}
 		owner.effects.length = 0
 	}
@@ -118,12 +118,12 @@ const disposeOwner = (owner)=> {
 	if (owner.cleanups){
 		for (let i = owner.cleanups.length - 1; i >= 0; i -= 1){
 			const cleanup = owner.cleanups[i]
-			if (typeof cleanup === 'function') cleanup()
+			if (typeof cleanup === 'function'){ cleanup() }
 		}
 		owner.cleanups.length = 0
 	}
-	if (owner.refs) owner.refs.length = 0
-	if (owner.mounts) owner.mounts.length = 0
+	if (owner.refs){ owner.refs.length = 0 }
+	if (owner.mounts){ owner.mounts.length = 0 }
 }
 
 const flushCleanups = (list)=> {
@@ -645,9 +645,9 @@ const applyRefProp = (element, ref)=> {
 	const assignRef = value=> ref(value)
 
 	const owner = currentOwner
-	
-	if (owner && !owner.mounted) {
-		(owner.refs ??= []).push(() => assignRef(element))
+
+	if (owner && !owner.mounted){
+		(owner.refs ??= []).push(()=> assignRef(element))
 	} else {
 		assignRef(element)
 	}
@@ -840,13 +840,13 @@ const applyProps = (element, props = {})=> {
 		// Dispose bindings for keys that disappeared. Surviving keys are left
 		// alone — their inner binding effects already react to value changes.
 		for (const [key, dispose] of bindings){
-			if (nextKeys.has(key)) continue
-			if (typeof dispose === 'function') dispose()
+			if (nextKeys.has(key)){ continue }
+			if (typeof dispose === 'function'){ dispose() }
 			bindings.delete(key)
 		}
 
 		for (const key of nextKeys){
-			if (bindings.has(key)) continue
+			if (bindings.has(key)){ continue }
 			bindings.set(key, createBindingForKey(key))
 		}
 	}
@@ -856,7 +856,7 @@ const applyProps = (element, props = {})=> {
 	if (currentOwner || getCurrentComputation()){
 		registerCleanup(()=> {
 			for (const dispose of bindings.values()){
-				if (typeof dispose === 'function') dispose()
+				if (typeof dispose === 'function'){ dispose() }
 			}
 			bindings.clear()
 		})
@@ -880,7 +880,7 @@ const applyProps = (element, props = {})=> {
 	// babel reactive transform output with no spreads), and for plain object
 	// props, keys never change — skip the outer effect to avoid one
 	// owner-effect allocation per element.
-	if ((isMergedProps(props) && !hasMergedPropsStaticKeys(props)) || isTree(props)){
+	if (isMergedProps(props) && !hasMergedPropsStaticKeys(props) || isTree(props)){
 		createBindingEffect(setup)
 	} else {
 		setup()
@@ -907,12 +907,12 @@ const node2Element = (node)=> {
 			// Signals and computeds are functions too (alien-signals binds an
 			// operator function) — they render as reactive text nodes, while a
 			// plain function child is a thunk that returns dynamic content.
-			if (isReactivePrimitive(node)) return createReactiveTextNode(node)
+			if (isReactivePrimitive(node)){ return createReactiveTextNode(node) }
 			return createReactiveChildNode(node)
 		case 'undefined':
 			return createPlaceholder()
 		case 'object': {
-			if (node === null) return createPlaceholder()
+			if (node === null){ return createPlaceholder() }
 			// Real DOM node returned from h()/jsx() — by far the most common
 			// 'object' case during initial mount. `nodeType` must be a number
 			// (Node spec: unsigned short); a plain object happening to carry a
@@ -1023,7 +1023,7 @@ const appendChild = (parent, child)=> {
 				list.push(...pending)
 			}
 			for (const grandchild of node.childNodes){
-				if (grandchild instanceof Element) stack.push(grandchild)
+				if (grandchild instanceof Element){ stack.push(grandchild) }
 			}
 		}
 		parent.appendChild(child)
@@ -1169,14 +1169,12 @@ const applyStaticProp = (element, key, value)=> {
 // would for jsx(), so dynamic children still arrive as thunks/descriptors and
 // are routed through appendChild's existing reactive/defer paths.
 const jsxStatic = (tag, props, child)=> {
-	const element = SVG_TAGS.has(tag)
-		? document.createElementNS('http://www.w3.org/2000/svg', tag)
-		: document.createElement(tag)
+	const element = SVG_TAGS.has(tag) ? document.createElementNS('http://www.w3.org/2000/svg', tag) : document.createElement(tag)
 	for (const key in props){
 		// Defensive: skip framework-reserved keys in case the babel transform
 		// ever emits them here. `children` shouldn't appear (it's the third
 		// arg), and `key` is consumed by the reconciler upstream.
-		if (key === 'children' || key === 'key') continue
+		if (key === 'children' || key === 'key'){ continue }
 		applyStaticProp(element, key, props[key])
 	}
 	if (child !== undefined){
@@ -1192,7 +1190,7 @@ const jsxStatic = (tag, props, child)=> {
 }
 // jsxDEV is the development-mode variant used by automatic JSX transforms; the extra
 // debug arguments (isStaticChildren, source, self) are unused at runtime.
-const jsxDEV = (tag, props, key) => jsx(tag, props, key)
+const jsxDEV = (tag, props, key)=> jsx(tag, props, key)
 
 // ============ DOM template cloning (Solid-style) ============
 // Three helpers the babel reactive transform can emit when it identifies a
@@ -1247,13 +1245,13 @@ const resolveChildToNodes = (value, out)=> {
 		v = v()
 		steps += 1
 	}
-	if (v == null || v === true || v === false) return
+	if (v == null || v === true || v === false){ return }
 	if (v instanceof Node){
 		out.push(v)
 		return
 	}
 	if (Array.isArray(v)){
-		for (const item of v) resolveChildToNodes(item, out)
+		for (const item of v){ resolveChildToNodes(item, out) }
 		return
 	}
 	if (isComponentDescriptor(v)){
@@ -1279,7 +1277,7 @@ const insert = (parent, accessor, marker = null)=> {
 	if (typeof accessor !== 'function'){
 		const nodes = []
 		resolveChildToNodes(accessor, nodes)
-		for (const n of nodes) parent.insertBefore(n, marker)
+		for (const n of nodes){ parent.insertBefore(n, marker) }
 		return
 	}
 	let current = []
@@ -1287,10 +1285,9 @@ const insert = (parent, accessor, marker = null)=> {
 		const next = accessor()
 
 		// Fast path: single existing text node + scalar next value → in-place data update.
-		if (current.length === 1 && current[0].nodeType === 3
-			&& (typeof next === 'string' || typeof next === 'number')){
+		if (current.length === 1 && current[0].nodeType === 3 && (typeof next === 'string' || typeof next === 'number')){
 			const str = String(next)
-			if (current[0].data !== str) current[0].data = str
+			if (current[0].data !== str){ current[0].data = str }
 			return
 		}
 
@@ -1300,15 +1297,15 @@ const insert = (parent, accessor, marker = null)=> {
 		// Naive diff: remove current, insert next. Adequate for single-slot
 		// inserts; keyed list reconciliation is handled separately by <Loop>.
 		for (const n of current){
-			if (n.parentNode === parent) parent.removeChild(n)
+			if (n.parentNode === parent){ parent.removeChild(n) }
 		}
-		for (const n of nodes) parent.insertBefore(n, marker)
+		for (const n of nodes){ parent.insertBefore(n, marker) }
 
 		// Mount any owners attached to inserted subtrees (component roots inside
 		// the inserted nodes register their owner on the DOM node — runOwnerMounts
 		// must fire once they're connected).
 		if (parent.isConnected){
-			for (const n of nodes) mountOwnedSubtree(n)
+			for (const n of nodes){ mountOwnedSubtree(n) }
 		}
 
 		current = nodes
@@ -1326,9 +1323,7 @@ const setProp = (element, key, accessor)=> {
 		// expressions through verbatim (>= 1-arity). Distinguish by arity so
 		// both shapes work without probing (which would invoke a direct callback
 		// with undefined).
-		const ref = typeof accessor === 'function' && accessor.length === 0
-			? accessor()
-			: accessor
+		const ref = typeof accessor === 'function' && accessor.length === 0 ? accessor() : accessor
 		applyRefProp(element, ref)
 		return
 	}
@@ -1359,7 +1354,7 @@ const setProp = (element, key, accessor)=> {
 		// accessor directly. Reactive primitives (signal/computed) follow the
 		// same shape — they're functions returning the current value.
 		const listener = (...args)=> {
-			let handler = accessor
+			const handler = accessor
 			if (typeof handler === 'function'){
 				const unwrapped = handler(...args)
 				if (typeof unwrapped === 'function'){
@@ -1448,7 +1443,7 @@ const renderApp = (container, node)=> {
 	// renderApp is an explicit mount boundary — fire onMount regardless of
 	// whether `container` is currently attached to a document, so detached
 	// containers (the common testing pattern) still run lifecycle callbacks.
-	placedNodes.forEach(n=> mountOwnedSubtree(n, {force: true}))
+	placedNodes.forEach(n=> mountOwnedSubtree(n, { force: true }))
 
 	// Return a disposer function
 	let disposed = false

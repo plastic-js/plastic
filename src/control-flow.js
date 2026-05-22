@@ -50,9 +50,7 @@ const createControlFlow = ({
 			// will set up their effects under `owner`. Letting them auto-link
 			// into the outer binding effect would re-trigger this update on
 			// every internal signal change and rebuild the DOM unnecessarily.
-			const result = runUntracked(()=> runWithOwner(owner, ()=> (
-				typeof branch === 'function' ? branch() : null
-			)))
+			const result = runUntracked(()=> runWithOwner(owner, ()=> typeof branch === 'function' ? branch() : null))
 			const node = renderInOwner(owner, result ?? null)
 			setCurrentComputation(prevComp)
 
