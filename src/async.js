@@ -1,4 +1,4 @@
-import { createSignal } from './src/reactivity.js'
+import { createSignal } from './reactivity.js'
 
 const normalizeService = (service)=> {
 	if (typeof service === 'function'){

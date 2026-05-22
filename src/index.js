@@ -39,6 +39,7 @@ import {
 	useSearchParams,
 } from './router.js'
 import { batch } from './reactivity.js'
+import { createAsync } from './async.js'
 import { mergeProps } from './merge-props.js'
 import { createSplitProps, splitProps } from './split-props.js'
 
@@ -80,6 +81,7 @@ export {
 	createContext,
 	useContext,
 	batch,
+	createAsync,
 	mergeProps,
 	splitProps,
 	createSplitProps,
