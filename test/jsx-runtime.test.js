@@ -21,8 +21,11 @@ import {
 	createTree,
 	disposeOwner,
 	h,
+	insert,
 	jsx,
 	jsxStatic,
+	setProp,
+	template,
 	onMount,
 	renderApp,
 	useContext,
@@ -1617,6 +1620,106 @@ describe('jsxStatic (babel-emitted fast path for fully-literal intrinsic element
 		const el = jsxStatic('circle', { cx: 10, cy: 20, r: 5 })
 		expect(el.namespaceURI).toBe('http://www.w3.org/2000/svg')
 		expect(el.getAttribute('cx')).toBe('10')
+	})
+})
+
+describe('DOM template cloning (template / insert / setProp)', ()=> {
+	it('template() returns the parsed first child for cloning', ()=> {
+		const t = template('<div class="row"><span>x</span></div>')
+		const a = t.cloneNode(true)
+		const b = t.cloneNode(true)
+		expect(a.tagName).toBe('DIV')
+		expect(a.className).toBe('row')
+		expect(a.firstChild.textContent).toBe('x')
+		expect(a).not.toBe(b)
+		expect(a.firstChild).not.toBe(b.firstChild)
+	})
+
+	it('template() parses SVG content in the SVG namespace when isSVG=true', ()=> {
+		const t = template('<circle cx="10" cy="20" r="5" />', true)
+		const el = t.cloneNode(true)
+		expect(el.namespaceURI).toBe('http://www.w3.org/2000/svg')
+	})
+
+	it('insert() appends a static scalar as text at the end when marker is null', ()=> {
+		const t = template('<span>item </span>')
+		const el = t.cloneNode(true)
+		insert(el, 42, null)
+		expect(el.textContent).toBe('item 42')
+	})
+
+	it('insert() updates a reactive accessor in place via the text fast path', ()=> {
+		const count = createSignal(1)
+		const t = template('<span>count: </span>')
+		const el = t.cloneNode(true)
+		insert(el, ()=> count(), null)
+
+		const before = el.lastChild
+		expect(el.textContent).toBe('count: 1')
+
+		count(2)
+		expect(el.textContent).toBe('count: 2')
+		// Same text node — fast path didn't swap nodes.
+		expect(el.lastChild).toBe(before)
+
+		count(3)
+		expect(el.lastChild).toBe(before)
+		expect(el.textContent).toBe('count: 3')
+	})
+
+	it('insert() replaces previous nodes when the accessor returns a different shape', ()=> {
+		const view = createSignal('plain')
+		const t = template('<div></div>')
+		const el = t.cloneNode(true)
+		insert(el, ()=> view() === 'plain' ? 'hello' : h('em', null, 'rich'), null)
+
+		expect(el.textContent).toBe('hello')
+
+		view('rich')
+		expect(el.querySelector('em')?.textContent).toBe('rich')
+
+		view('plain')
+		expect(el.textContent).toBe('hello')
+		expect(el.querySelector('em')).toBe(null)
+	})
+
+	it('insert() respects a marker node as the insertion point', ()=> {
+		const t = template('<div>before <!--slot-->after</div>')
+		const el = t.cloneNode(true)
+		// Walk to find the comment marker.
+		let marker = el.firstChild
+		while (marker && marker.nodeType !== 8) marker = marker.nextSibling
+		insert(el, 'X', marker)
+		// X should appear between 'before ' and 'after', i.e. before the marker.
+		expect(el.textContent).toBe('before Xafter')
+	})
+
+	it('setProp() writes a static value once', ()=> {
+		const el = document.createElement('input')
+		setProp(el, 'type', 'text')
+		setProp(el, 'tabIndex', 4)
+		expect(el.type).toBe('text')
+		expect(el.tabIndex).toBe(4)
+	})
+
+	it('setProp() wraps a reactive accessor in a binding effect', ()=> {
+		const klass = createSignal('a')
+		const el = document.createElement('div')
+		setProp(el, 'className', ()=> klass())
+		expect(el.className).toBe('a')
+
+		klass('b c')
+		expect(el.className).toBe('b c')
+	})
+
+	it('setProp() handles a signal value (function that is a reactive primitive)', ()=> {
+		const title = createSignal('draft')
+		const el = document.createElement('div')
+		setProp(el, 'title', title)
+		expect(el.title).toBe('draft')
+
+		title('published')
+		expect(el.title).toBe('published')
 	})
 })
 

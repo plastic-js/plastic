@@ -1099,6 +1099,155 @@ const jsxStatic = (tag, props, child)=> {
 // debug arguments (isStaticChildren, source, self) are unused at runtime.
 const jsxDEV = (tag, props, key) => jsx(tag, props, key)
 
+// ============ DOM template cloning (Solid-style) ============
+// Three helpers the babel reactive transform can emit when it identifies a
+// statically-shaped JSX subtree. They let the framework skip per-element
+// createElement/applyProps/appendChild for the static skeleton and only do
+// runtime work for the dynamic holes that babel can't fold into the template.
+//
+// Emission shape from babel:
+//   const _tmpl$ = /*#__PURE__*/ template('<div class="row"><span>item </span></div>')
+//   const Row = ({i}) => {
+//     const _el = _tmpl$.cloneNode(true)
+//     const _span = _el.firstChild
+//     insert(_span, () => i, null)   // dynamic text appended at end of span
+//     return _el
+//   }
+// Static props go into the template string itself; dynamic props use setProp;
+// dynamic children use insert. There is no separate clone helper — babel emits
+// `_tmpl$.cloneNode(true)` directly.
+
+// Parse `html` into a detached template and return the first child of its
+// content. Babel emits ONE module-level `template()` call per unique static
+// shape, so the parse cost is amortized across every instance — only the
+// per-instance `cloneNode(true)` remains hot.
+//
+// SVG note: an `<svg>` element parsed via innerHTML of an HTMLTemplateElement
+// correctly inherits the SVG namespace, but standalone SVG children (`<circle>`
+// at the root) do not — pass isSVG=true to wrap-then-unwrap so the namespace
+// resolves on every node.
+const template = (html, isSVG = false)=> {
+	const t = document.createElement('template')
+	if (isSVG){
+		t.innerHTML = `<svg>${html}</svg>`
+		const svgRoot = t.content.firstChild
+		// Unwrap so the caller's first cloneNode points at the real root.
+		return svgRoot.firstChild ?? svgRoot
+	}
+	t.innerHTML = html
+	return t.content.firstChild
+}
+
+// Recursively resolve `value` (which may be a thunk, signal, descriptor, node,
+// primitive, or array) into a flat list of Nodes ready to insert. Mirrors what
+// node2Element does but flattens arrays in place instead of producing a
+// DocumentFragment, since insert() needs direct control over each Node so the
+// next reactive run can remove exactly the nodes it inserted.
+const resolveChildToNodes = (value, out)=> {
+	let v = value
+	// Walk through plain thunks (NOT signals/computeds — those resolve to a
+	// reactive text node so the framework can update .data in place).
+	let steps = 0
+	while (typeof v === 'function' && !isReactivePrimitive(v) && steps < MAX_REACTIVE_RESOLVE_STEPS){
+		v = v()
+		steps += 1
+	}
+	if (v == null || v === true || v === false) return
+	if (v instanceof Node){
+		out.push(v)
+		return
+	}
+	if (Array.isArray(v)){
+		for (const item of v) resolveChildToNodes(item, out)
+		return
+	}
+	if (isComponentDescriptor(v)){
+		out.push(materializeComponentDescriptor(v))
+		return
+	}
+	if (isReactivePrimitive(v)){
+		out.push(createReactiveTextNode(v))
+		return
+	}
+	out.push(document.createTextNode(String(v)))
+}
+
+// Insert dynamic content into `parent` immediately before `marker` (or at the
+// end when marker is null). Static accessors run once; functions/signals wrap
+// in a binding effect so the slot updates whenever the source changes.
+//
+// Single-text-node fast path: when both the previous and next render produce a
+// single text/string/number, mutate the existing text node's `.data` instead
+// of swapping nodes. This matches Solid's behavior and avoids DOM thrash for
+// the common `{count()}` shape.
+const insert = (parent, accessor, marker = null)=> {
+	if (typeof accessor !== 'function'){
+		const nodes = []
+		resolveChildToNodes(accessor, nodes)
+		for (const n of nodes) parent.insertBefore(n, marker)
+		return
+	}
+	let current = []
+	createBindingEffect(()=> {
+		const next = accessor()
+
+		// Fast path: single existing text node + scalar next value → in-place data update.
+		if (current.length === 1 && current[0].nodeType === 3
+			&& (typeof next === 'string' || typeof next === 'number')){
+			const str = String(next)
+			if (current[0].data !== str) current[0].data = str
+			return
+		}
+
+		const nodes = []
+		resolveChildToNodes(next, nodes)
+
+		// Naive diff: remove current, insert next. Adequate for single-slot
+		// inserts; keyed list reconciliation is handled separately by <Loop>.
+		for (const n of current){
+			if (n.parentNode === parent) parent.removeChild(n)
+		}
+		for (const n of nodes) parent.insertBefore(n, marker)
+
+		// Mount any owners attached to inserted subtrees (component roots inside
+		// the inserted nodes register their owner on the DOM node — runOwnerMounts
+		// must fire once they're connected).
+		if (parent.isConnected){
+			for (const n of nodes) mountOwnedSubtree(n)
+		}
+
+		current = nodes
+	})
+}
+
+// Apply a single prop (static or reactive) to an element. Static values write
+// once; function/signal values wrap in a binding effect that re-applies on
+// change. Class and style go through the existing helpers so the
+// merge/diff semantics stay identical to the JSX path.
+const setProp = (element, key, accessor)=> {
+	if (typeof accessor !== 'function' || isReactivePrimitive(accessor)){
+		// Reactive primitives (signal/computed) also go through the effect path
+		// so the prop stays in sync — handled in the else branch below.
+		if (!isReactive(accessor)){
+			applyStaticProp(element, key, accessor)
+			return
+		}
+	}
+	let prevStyle
+	createBindingEffect(()=> {
+		const v = resolveReactiveValue(accessor)
+		if (key === 'className' || key === 'class'){
+			applyClassProp(element, v)
+			return
+		}
+		if (key === 'style'){
+			prevStyle = applyStyleProp(element, v, prevStyle)
+			return
+		}
+		setDomProp(element, JSX_PROP_MAP[key] ?? key, v)
+	})
+}
+
 // Render by appending the normalized root node into the target container.
 // Returns a disposer function that cleans up all effects and listeners.
 const renderApp = (container, node)=> {
@@ -1135,6 +1284,12 @@ export {
 	jsxDEV,
 	jsxs,
 	jsxStatic,
+	// DOM template cloning helpers (babel reactive transform emits these for
+	// statically-shaped JSX subtrees — they let cloned templates skip the
+	// per-element jsx()/applyProps machinery)
+	template,
+	insert,
+	setProp,
 	onMount,
 	onUnmount,
 	createContext,
