@@ -218,6 +218,7 @@ const readOnlyTrap = ()=> {
 }
 
 const IS_MERGED_PROPS = Symbol('mergeProps')
+const HAS_STATIC_KEYS = Symbol('mergeProps.staticKeys')
 
 export const mergeProps = (...sources)=> {
 	// Fast path: a single plain-object source is structurally equivalent to the
@@ -229,9 +230,18 @@ export const mergeProps = (...sources)=> {
 		return sources[0]
 	}
 
+	// When no source is a function-typed spread (`{...api()}`), the key set is
+	// fixed at construction time — applyProps can skip its outer key-tracking
+	// effect entirely. This is the common case under the babel reactive transform
+	// which wraps every JSX in mergeProps even when there are no spreads.
+	let hasStaticKeys = true
+	for (let i = 0; i < sources.length; i += 1){
+		if (typeof sources[i] === 'function'){ hasStaticKeys = false; break }
+	}
 	return new Proxy({}, {
 		get: (_, key)=> {
 			if (key === IS_MERGED_PROPS) return true
+			if (key === HAS_STATIC_KEYS) return hasStaticKeys
 			return resolveKey(sources, key)
 		},
 		has: (_, key)=> hasKey(sources, key),
@@ -252,3 +262,4 @@ export const mergeProps = (...sources)=> {
 }
 
 export const isMergedProps = (value)=> value != null && typeof value === 'object' && value[IS_MERGED_PROPS] === true
+export const hasMergedPropsStaticKeys = (value)=> value != null && typeof value === 'object' && value[HAS_STATIC_KEYS] === true

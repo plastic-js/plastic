@@ -6,7 +6,7 @@ import {
 } from './utils.js'
 import { getCurrentComputation, setCurrentComputation } from './computation-context.js'
 import { createControlFlow } from './control-flow.js'
-import { isMergedProps, mergeProps } from './merge-props.js'
+import { hasMergedPropsStaticKeys, isMergedProps, mergeProps } from './merge-props.js'
 
 const Fragment = Symbol('Fragment')
 const OWNER = Symbol('owner')
@@ -695,11 +695,15 @@ const bindReactiveEvent = (element, props, key)=> {
 // keys later we tear down the previous bindings and rebuild them from the
 // current key set.
 const applyProps = (element, props = {})=> {
-	createBindingEffect(()=> {
+	const setup = ()=> {
 		const bindings = []
-		registerCleanup(()=> {
-			disposeBindings(bindings)
-		})
+		// Only register cleanup if there's an owner/computation to attach to.
+		// Allows top-level h() calls outside any component scope (e.g. tests).
+		if (currentOwner || getCurrentComputation()){
+			registerCleanup(()=> {
+				disposeBindings(bindings)
+			})
+		}
 
 		for (const key of Reflect.ownKeys(props)){
 			if (typeof key === 'symbol' || key === 'children' || key === 'key'){
@@ -724,7 +728,18 @@ const applyProps = (element, props = {})=> {
 			}
 			bindings.push(bindReactiveProp(element, props, key))
 		}
-	})
+	}
+
+	// Only wrap in an outer binding effect when the proxy has dynamic keys (a
+	// function-typed spread source like `{...api()}`). For static-key proxies
+	// (the common babel reactive transform output with no spreads), and for
+	// plain object props, keys never change — skip the outer effect to avoid
+	// one owner-effect allocation per element.
+	if (isMergedProps(props) && !hasMergedPropsStaticKeys(props)){
+		createBindingEffect(setup)
+	} else {
+		setup()
+	}
 	return element
 }
 
