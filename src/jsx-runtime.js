@@ -21,32 +21,32 @@ const CONTEXT_ID = Symbol('context-id')
 
 const getCurrentOwner = ()=> currentOwner
 
+// Owner fields are lazily allocated. Most components register nothing
+// (no onMount, no context, no refs), so paying for a Set + Map + 4 arrays
+// per component dominated mount cost. Allocate each collection only on first
+// use. Readers must tolerate `undefined`.
 const createOwner = (parent = null)=> {
 	const owner = {
 		parent,
-		children: new Set(),
-		cleanups: [],
-		effects: [],
-		contexts: new Map(),
-		refs: [],
-		mounts: [],
+		children: undefined,
+		cleanups: undefined,
+		effects: undefined,
+		contexts: undefined,
+		refs: undefined,
+		mounts: undefined,
 		mounted: false,
 	}
 	if (parent){
-		parent.children.add(owner)
+		(parent.children ??= new Set()).add(owner)
 	}
 	return owner
 }
 
 const runOwnerMounts = (owner)=> {
 	runUntracked(()=> {
-		owner.children.forEach(child=> runOwnerMounts(child))
-		owner.refs.forEach((fn)=> {
-			fn()
-		})
-		owner.mounts.forEach((fn)=> {
-			fn()
-		})
+		owner.children?.forEach(child=> runOwnerMounts(child))
+		owner.refs?.forEach((fn)=> { fn() })
+		owner.mounts?.forEach((fn)=> { fn() })
 		owner.mounted = true
 	})
 }
@@ -87,29 +87,33 @@ const mountOwnedSubtree = (node)=> {
 
 const disposeOwner = (owner)=> {
 	if (owner.parent){
-		owner.parent.children.delete(owner)
+		owner.parent.children?.delete(owner)
 	}
 
 	// Dispose all child owners recursively
-	owner.children.forEach(child=> disposeOwner(child))
-	owner.children.clear()
+	if (owner.children){
+		owner.children.forEach(child=> disposeOwner(child))
+		owner.children.clear()
+	}
 
 	// Stop owner-bound effects for this scope during unmount.
-	;[...owner.effects].reverse().forEach((stop)=> {
-		if (typeof stop === 'function'){
-			stop()
+	if (owner.effects){
+		for (let i = owner.effects.length - 1; i >= 0; i -= 1){
+			const stop = owner.effects[i]
+			if (typeof stop === 'function') stop()
 		}
-	})
-	owner.effects.length = 0
+		owner.effects.length = 0
+	}
 
-	;[...owner.cleanups].reverse().forEach((cleanup)=> {
-		if (typeof cleanup === 'function'){
-			cleanup()
+	if (owner.cleanups){
+		for (let i = owner.cleanups.length - 1; i >= 0; i -= 1){
+			const cleanup = owner.cleanups[i]
+			if (typeof cleanup === 'function') cleanup()
 		}
-	})
-	owner.cleanups.length = 0
-	owner.refs.length = 0
-	owner.mounts.length = 0
+		owner.cleanups.length = 0
+	}
+	if (owner.refs) owner.refs.length = 0
+	if (owner.mounts) owner.mounts.length = 0
 }
 
 const flushCleanups = (list)=> {
@@ -151,8 +155,8 @@ const createBindingEffect = (runner)=> {
 		return stop
 	}
 	// Register effect and its disposal in the owner
-	owner.effects.push(stop)
-	owner.cleanups.push(()=> {
+	(owner.effects ??= []).push(stop)
+	;(owner.cleanups ??= []).push(()=> {
 		// Run remaining local cleanups, untracked to avoid accidental dependency registration
 		flushCleanups(local)
 	})
@@ -168,7 +172,7 @@ const registerCleanup = (fn)=> {
 	if (currentComputation){
 		currentComputation.cleanups.push(fn)
 	} else {
-		currentOwner.cleanups.push(fn)
+		(currentOwner.cleanups ??= []).push(fn)
 	}
 }
 
@@ -177,14 +181,14 @@ const onMount = (fn)=> {
 	if (!currentOwner){
 		throw new Error('onMount must be called within a component scope')
 	}
-	currentOwner.mounts.push(fn)
+	(currentOwner.mounts ??= []).push(fn)
 }
 
 const onUnmount = (fn)=> {
 	if (!currentOwner){
 		throw new Error('onUnmount must be called within a component scope')
 	}
-	currentOwner.cleanups.push(fn)
+	(currentOwner.cleanups ??= []).push(fn)
 }
 
 const createContext = (defaultValue)=> {
@@ -199,7 +203,7 @@ const createContext = (defaultValue)=> {
 			throw new Error('Context Provider must be rendered within a component scope')
 		}
 
-		currentOwner.contexts.set(context[CONTEXT_ID], value)
+		(currentOwner.contexts ??= new Map()).set(context[CONTEXT_ID], value)
 
 		if (typeof children === 'function'){
 			return children()
@@ -222,7 +226,7 @@ const useContext = (context)=> {
 
 	let owner = currentOwner
 	while (owner){
-		if (owner.contexts.has(context[CONTEXT_ID])){
+		if (owner.contexts?.has(context[CONTEXT_ID])){
 			return owner.contexts.get(context[CONTEXT_ID])
 		}
 		owner = owner.parent
@@ -595,7 +599,7 @@ const applyRefProp = (element, ref)=> {
 	const owner = currentOwner
 	
 	if (owner && !owner.mounted) {
-		owner.refs.push(() => assignRef(element))
+		(owner.refs ??= []).push(() => assignRef(element))
 	} else {
 		assignRef(element)
 	}

@@ -802,8 +802,8 @@ describe('lifecycle & cleanup management', ()=> {
 		const parentOwner = createOwner(null)
 		const childOwner = createOwner(parentOwner)
 
-		childOwner.effects.push(()=> order.push('child-effect'))
-		parentOwner.effects.push(()=> order.push('parent-effect'))
+		;(childOwner.effects ??= []).push(()=> order.push('child-effect'))
+		;(parentOwner.effects ??= []).push(()=> order.push('parent-effect'))
 
 		disposeOwner(parentOwner)
 
@@ -926,12 +926,12 @@ describe('lifecycle & cleanup management', ()=> {
 		const owner2 = createOwner(owner1)
 		const owner3 = createOwner(owner1)
 
-		owner1.cleanups.push(cleanup1)
-		owner2.cleanups.push(cleanup2)
-		owner3.cleanups.push(cleanup3)
+		;(owner1.cleanups ??= []).push(cleanup1)
+		;(owner2.cleanups ??= []).push(cleanup2)
+		;(owner3.cleanups ??= []).push(cleanup3)
 
-		owner1.children.add(owner2)
-		owner1.children.add(owner3)
+		;(owner1.children ??= new Set()).add(owner2)
+		;(owner1.children ??= new Set()).add(owner3)
 
 		disposeOwner(owner1)
 
