@@ -624,6 +624,41 @@ const disposeBindings = (bindings)=> {
 // zero-arg accessor thunks (used widely by ark-plastic / zag adapters) are
 // unwrapped before being applied to the DOM.
 const bindReactiveProp = (element, props, key)=> {
+	const rawValue = props[key]
+
+	// Static (non-reactive) fast path: write the prop directly with no binding
+	// effect. Most JSX props in real apps are static (className='row', id=...,
+	// type='button' etc.) — building an effect for each one was the biggest
+	// per-component cost in mount benchmarks.
+	if (!isReactive(rawValue)){
+		let prevStyleValue
+		if (key === 'className' || key === 'class'){
+			applyClassProp(element, rawValue)
+		} else if (key === 'style'){
+			prevStyleValue = applyStyleProp(element, rawValue, undefined)
+		} else {
+			const domKey = JSX_PROP_MAP[key] ?? key
+			setDomProp(element, domKey, rawValue)
+		}
+
+		return ()=> {
+			if (key === 'className' || key === 'class'){
+				element.removeAttribute('class')
+				return
+			}
+			if (key === 'style'){
+				if (prevStyleValue && typeof prevStyleValue === 'object'){
+					Object.keys(prevStyleValue).forEach(prop=> clearStyleKey(element, prop))
+				} else if (typeof prevStyleValue === 'string'){
+					element.style.cssText = ''
+				}
+				return
+			}
+			const domKey = JSX_PROP_MAP[key] ?? key
+			clearDomProp(element, domKey)
+		}
+	}
+
 	let prevStyleValue
 	const stop = createBindingEffect(()=> {
 		const value = resolveReactiveValue(props[key])
