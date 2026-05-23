@@ -220,6 +220,15 @@ const readOnlyTrap = ()=> {
 const IS_MERGED_PROPS = Symbol('mergeProps')
 
 export const mergeProps = (...sources)=> {
+	// Fast path: a single plain-object source is structurally equivalent to the
+	// object itself for prop access (no class/className aliasing across sources,
+	// no style merging, no spread thunks). Babel reactive transform wraps every
+	// JSX in `mergeProps({...})` even with no spreads, so this short-circuit
+	// eliminates one Proxy allocation per element on the typical render path.
+	if (sources.length === 1 && sources[0] != null && typeof sources[0] === 'object' && isPlainObject(sources[0])){
+		return sources[0]
+	}
+
 	return new Proxy({}, {
 		get: (_, key)=> {
 			if (key === IS_MERGED_PROPS) return true

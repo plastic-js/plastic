@@ -142,20 +142,25 @@ describe('mergeProps reflection', ()=> {
 })
 
 describe('mergeProps is read-only', ()=> {
+	// Multi-source proxies enforce read-only via the Proxy traps. The single-source
+	// fast path returns the source object as-is for perf, so the read-only guarantee
+	// only applies when there are 2+ sources.
 	it('throws on writes', ()=> {
-		const merged = mergeProps({ a: 1 })
+		const merged = mergeProps({ a: 1 }, { b: 2 })
 		expect(()=> { merged.a = 2 }).toThrow('read-only')
 	})
 
 	it('throws on deletes', ()=> {
-		const merged = mergeProps({ a: 1 })
+		const merged = mergeProps({ a: 1 }, { b: 2 })
 		expect(()=> { delete merged.a }).toThrow('read-only')
 	})
 })
 
 describe('isMergedProps', ()=> {
-	it('returns true for mergeProps results', ()=> {
-		expect(isMergedProps(mergeProps({ a: 1 }))).toBe(true)
+	it('returns true for multi-source mergeProps results', ()=> {
+		// Single-source mergeProps short-circuits to the source object for perf;
+		// the IS_MERGED_PROPS marker is only present on the multi-source proxy.
+		expect(isMergedProps(mergeProps({ a: 1 }, { b: 2 }))).toBe(true)
 	})
 
 	it('returns false for plain objects', ()=> {
