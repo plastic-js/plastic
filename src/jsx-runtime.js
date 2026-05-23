@@ -1042,6 +1042,59 @@ const jsx = (tag, props, key)=> {
 	return h(tag, mergeProps(props, { key }))
 }
 const jsxs = jsx
+
+// Static fast path counterpart to applyProps: writes a single literal value
+// straight to the DOM with no isReactive check, no binding-effect wrapper, and
+// no JSX_PROP_MAP miss for the hot keys. Used exclusively by jsxStatic, which
+// the babel reactive transform emits when every attribute value is provably a
+// scalar literal (string/number/boolean/null) — so there is nothing to track,
+// nothing to dispose, and the prop never changes after initial mount.
+const applyStaticProp = (element, key, value)=> {
+	if (key === 'className' || key === 'class'){
+		applyClassProp(element, value)
+		return
+	}
+	if (key === 'style'){
+		applyStyleProp(element, value, undefined)
+		return
+	}
+	setDomProp(element, JSX_PROP_MAP[key] ?? key, value)
+}
+
+// jsxStatic — emitted by the babel reactive transform when ALL of these hold:
+//   - tag is a lowercase intrinsic string (no components, no Dynamic)
+//   - at least one attribute, none of them spread
+//   - every attribute value is a scalar literal (string/number/boolean/null)
+//
+// Under those conditions there are no reactive props, no event handlers, no
+// refs, no merged-props proxy — applyProps' entire dispatch machinery
+// (createBindingEffect / isMergedProps / Reflect.ownKeys / bindReactiveProp /
+// isReactive) is pure overhead. We bypass it and write each prop directly.
+// Children pass through unchanged: babel emits the same child expressions it
+// would for jsx(), so dynamic children still arrive as thunks/descriptors and
+// are routed through appendChild's existing reactive/defer paths.
+const jsxStatic = (tag, props, child)=> {
+	const element = SVG_TAGS.has(tag)
+		? document.createElementNS('http://www.w3.org/2000/svg', tag)
+		: document.createElement(tag)
+	for (const key in props){
+		// Defensive: skip framework-reserved keys in case the babel transform
+		// ever emits them here. `children` shouldn't appear (it's the third
+		// arg), and `key` is consumed by the reconciler upstream.
+		if (key === 'children' || key === 'key') continue
+		applyStaticProp(element, key, props[key])
+	}
+	if (child !== undefined){
+		// Babel emits the third arg as a single value when there is one child
+		// and an array when there are several — mirror jsx() / jsxs() shape.
+		if (Array.isArray(child)){
+			appendChildren(element, child)
+		} else {
+			appendChild(element, child)
+		}
+	}
+	return element
+}
 // jsxDEV is the development-mode variant used by automatic JSX transforms; the extra
 // debug arguments (isStaticChildren, source, self) are unused at runtime.
 const jsxDEV = (tag, props, key) => jsx(tag, props, key)
@@ -1081,6 +1134,7 @@ export {
 	jsx,
 	jsxDEV,
 	jsxs,
+	jsxStatic,
 	onMount,
 	onUnmount,
 	createContext,

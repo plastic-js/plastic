@@ -22,6 +22,7 @@ import {
 	disposeOwner,
 	h,
 	jsx,
+	jsxStatic,
 	onMount,
 	renderApp,
 	useContext,
@@ -1556,6 +1557,66 @@ describe('control flow: Match multi-branch rendering', ()=> {
 
 		status('success')
 		expect(container.textContent).toContain('Unknown')
+	})
+})
+
+describe('jsxStatic (babel-emitted fast path for fully-literal intrinsic elements)', ()=> {
+	it('renders an element with string, number, boolean, and null props', ()=> {
+		const el = jsxStatic('input', {
+			type: 'text',
+			tabIndex: 3,
+			disabled: false,
+			placeholder: null,
+		})
+
+		expect(el.tagName).toBe('INPUT')
+		expect(el.type).toBe('text')
+		expect(el.tabIndex).toBe(3)
+		expect(el.disabled).toBe(false)
+		expect(el.hasAttribute('placeholder')).toBe(false)
+	})
+
+	it('applies className via applyClassProp', ()=> {
+		const el = jsxStatic('div', { className: 'row primary' })
+		expect(el.className).toBe('row primary')
+	})
+
+	it('applies style prop (string form)', ()=> {
+		const el = jsxStatic('div', { style: 'color: red; width: 10px' })
+		expect(el.style.color).toBe('red')
+		expect(el.style.width).toBe('10px')
+	})
+
+	it('attaches a single static child', ()=> {
+		const el = jsxStatic('span', { className: 'label' }, 'hello')
+		expect(el.textContent).toBe('hello')
+		expect(el.className).toBe('label')
+	})
+
+	it('attaches an array of children including dynamic thunks', ()=> {
+		const count = createSignal(7)
+		const el = jsxStatic('p', { className: 'note' }, ['count: ', ()=> count()])
+		expect(el.textContent).toBe('count: 7')
+
+		count(8)
+		expect(el.textContent).toBe('count: 8')
+	})
+
+	it('routes child component descriptors through the normal materialization path', ()=> {
+		const Child = ()=> h('em', null, 'inner')
+		const el = jsxStatic('section', { className: 'wrap' }, jsx(Child))
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		container.appendChild(el)
+		// flushPendingDescriptors only runs when appendChild has a current owner;
+		// at the top level the descriptor is materialized eagerly via node2Element.
+		expect(el.querySelector('em')?.textContent).toBe('inner')
+	})
+
+	it('creates SVG elements in the SVG namespace', ()=> {
+		const el = jsxStatic('circle', { cx: 10, cy: 20, r: 5 })
+		expect(el.namespaceURI).toBe('http://www.w3.org/2000/svg')
+		expect(el.getAttribute('cx')).toBe('10')
 	})
 })
 
