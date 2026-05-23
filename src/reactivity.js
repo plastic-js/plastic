@@ -353,9 +353,19 @@ const tree = (obj)=> {
 // Internal binding effects/computations create their own active subscribers,
 // so suppressing the outer one here only affects bare signal reads in the
 // component body.
+// Fast path: when no subscriber is currently active (the typical case during
+// initial mount from `renderApp`, outside any enclosing effect), the
+// swap-to-undefined and restore are both no-ops. Skip the try/finally and the
+// swap entirely — this is invoked once per component, so eliminating the
+// instrumentation here removes measurable per-component overhead during mount.
+//
+// Slow path: a single `setActiveSub(undefined)` swap returns the previous
+// subscriber in one call, saving the separate `getActiveSub()` read.
 const runUntracked = (fn)=> {
-	const prevSub = getActiveSub()
-	setActiveSub(undefined)
+	if (getActiveSub() === undefined){
+		return fn()
+	}
+	const prevSub = setActiveSub(undefined)
 	try {
 		return fn()
 	} finally {
