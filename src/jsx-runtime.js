@@ -1,6 +1,7 @@
 import {
 	batch, createComputed, createSignal, createTree, effect, isComputed, isSignal, isTree, runUntracked, toRaw,
 } from './reactivity.js'
+import { getActiveSub, setActiveSub } from 'alien-signals'
 import {
 	flattenChildren, isEventProp, normalizeTextNodeValue, toClassMap, toClassTokens,
 } from './utils.js'
@@ -336,8 +337,21 @@ const materializeComponentDescriptor = (descriptor)=> {
 		componentProps = mergeProps(componentProps, { children: kids })
 	}
 
-	const result = runUntracked(()=> runWithOwner(owner, ()=> descriptor.tag(componentProps)))
-	const normalized = runUntracked(()=> renderInOwner(owner, result))
+	// Fuse the owner swap and untracked context into one try/finally. Inlining
+	// avoids the runUntracked closure + extra try/finally per component, which
+	// shows up in profile (3000 components × these wrappers was a meaningful
+	// share of mount time).
+	const prevOwner = currentOwner
+	const prevSub = getActiveSub()
+	currentOwner = owner
+	setActiveSub(undefined)
+	let normalized
+	try {
+		normalized = node2Element(descriptor.tag(componentProps))
+	} finally {
+		currentOwner = prevOwner
+		setActiveSub(prevSub)
+	}
 
 	if (normalized instanceof Node){
 		normalized[OWNER] = owner
