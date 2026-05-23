@@ -797,35 +797,52 @@ const applyProps = (element, props = {})=> {
 }
 
 // Normalize any JSX return value into a DOM node that can be appended safely.
+// Dispatch is organized as a `typeof` switch so the engine can lower it to a
+// jump table, and the most frequent shapes are handled first:
+//   - 'string'/'number': text children like `["item ", i]` (hottest in lists)
+//   - 'object' → Node: the Element returned from a component body
+//   - 'object' → descriptor: child components in an array
+// Within the 'object' arm we use `node.nodeType != null` instead of
+// `instanceof Node`, since a property read is cheaper than walking the
+// prototype chain, and we read the descriptor symbol directly to skip the
+// redundant `typeof === 'object'` check inside isComponentDescriptor.
 const node2Element = (node)=> {
-	if (node === null || node === undefined){
-		return createPlaceholder()
+	switch (typeof node){
+		case 'string':
+		case 'number':
+			return document.createTextNode(String(node))
+		case 'function':
+			// Signals and computeds are functions too (alien-signals binds an
+			// operator function) — they render as reactive text nodes, while a
+			// plain function child is a thunk that returns dynamic content.
+			if (isReactivePrimitive(node)) return createReactiveTextNode(node)
+			return createReactiveChildNode(node)
+		case 'undefined':
+			return createPlaceholder()
+		case 'object': {
+			if (node === null) return createPlaceholder()
+			// Real DOM node returned from h()/jsx() — by far the most common
+			// 'object' case during initial mount.
+			if (node.nodeType != null){
+				flushPendingDescriptors(node)
+				return node
+			}
+			if (node[COMPONENT_DESCRIPTOR] === true){
+				return materializeComponentDescriptor(node)
+			}
+			if (Array.isArray(node)){
+				const fragment = document.createDocumentFragment()
+				appendChildren(fragment, node)
+				// Do NOT flush here — the caller (appendChild) will transfer any pending
+				// descriptors to the real parent element before draining the fragment, so
+				// flushPendingDescriptors runs later with the correct owner active.
+				return fragment
+			}
+			return createPlaceholder()
+		}
+		default:
+			return createPlaceholder()
 	}
-	if (isComponentDescriptor(node)){
-		return materializeComponentDescriptor(node)
-	}
-	if (isReactivePrimitive(node)){
-		return createReactiveTextNode(node)
-	}
-	if (typeof node === 'function'){
-		return createReactiveChildNode(node)
-	}
-	if (typeof node === 'string' || typeof node === 'number'){
-		return document.createTextNode(String(node))
-	}
-	if (node instanceof Node){
-		flushPendingDescriptors(node)
-		return node
-	}
-	if (Array.isArray(node)){
-		const fragment = document.createDocumentFragment()
-		appendChildren(fragment, node)
-		// Do NOT flush here — the caller (appendChild) will transfer any pending
-		// descriptors to the real parent element before draining the fragment, so
-		// flushPendingDescriptors runs later with the correct owner active.
-		return fragment
-	}
-	return createPlaceholder()
 }
 
 const materializeNode = node=> node2Element(node)
