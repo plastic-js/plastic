@@ -24,7 +24,7 @@ Plastic enforces a strict one-way data flow contract: data travels **downward** 
 
 ### Read-Only Props Proxy
 
-When a JSX element carries any attributes or children, the Babel plugin compiles all props into a single `mergeProps(...)` call. The result is a read-only Proxy — any attempt to write a prop throws immediately:
+When a JSX element compiles to the general `jsx()` path (see [JSX Compilation Paths](#jsx-compilation-paths) — i.e. components, `<Dynamic>`, fragments, or intrinsics with a spread / non-literal attribute), the Babel plugin compiles all props into a single `mergeProps(...)` call. The result is a read-only Proxy — any attempt to write a prop throws immediately:
 
 ```js
 const Child = (props) => {
@@ -93,7 +93,7 @@ Plastic and Solid diverge significantly on how `class` / `className` is resolved
 - **Solid** has two distinct modes selected at compile time:
   - *Merging mode* (no spread present): static and dynamic class attributes are concatenated into a single space-separated string.
   - *Assignment mode* (any spread present): the compiler switches to sequential `element.className = value` assignment, so the **last** class-bearing prop or spread wins and any earlier class declarations are overwritten.
-- **Plastic** has only one mode: the Babel plugin hands every attribute — static, dynamic, and spread alike — to the runtime `mergeProps` unchanged, and `mergeProps` performs the merge. All three source types are concatenated additively, and each source's value may itself be either a string or an object (e.g. `{ foo: true, bar: isActive() }`); both forms are normalized and merged into the final class list.
+- **Plastic** has only one mode. Whenever an element compiles to the `jsx()` path (which any spread forces it into — see [JSX Compilation Paths](#jsx-compilation-paths)), the Babel plugin hands every attribute — static, dynamic, and spread alike — to the runtime `mergeProps` unchanged, and `mergeProps` performs the merge. All three source types are concatenated additively, and each source's value may itself be either a string or an object (e.g. `{ foo: true, bar: isActive() }`); both forms are normalized and merged into the final class list.
 
 In short: introducing a spread in Solid can silently erase previously declared classes; in Plastic the same code keeps all contributions and combines them. This makes host components' class contributions safe under composition without the consumer having to know whether spreads are involved downstream.
 
@@ -128,6 +128,88 @@ The Babel plugin rejects duplicate attribute names on the same JSX element at **
 - **Mount/dispose API**: `renderApp(container, node)` returns an idempotent disposer that unmounts DOM and disposes owner/effect scopes.
 - **Lifecycle hooks**: `onMount` and cleanup registration (`onCleanup` wrapper) are available for component-level setup and teardown.
 
+## JSX Compilation Paths
+
+The `babel-preset-plastic` reactive transform inspects every JSX element and lowers it to one of four runtime shapes. Paths are tried top-to-bottom; the first match wins. Earlier paths are strictly cheaper at runtime, so the transform always picks the most specialized form an element qualifies for.
+
+The plugin's decision cascade in one line:
+
+```
+if (foldable) { if (ops == 0) cloneNode else IIFE } else if (jsxStatic) ... else generic
+```
+
+Paths 1 and 2 share the same `foldable` branch in the source — they differ only by whether the template has dynamic holes (`plan.ops.length`). Paths 3 and 4 are the remaining `else if` / `else` arms.
+
+### 1. Template clone (pure static subtree)
+
+**Trigger:** an entire subtree is "foldable" — intrinsic lowercase tags only, no spread attrs, no namespaced attr names, and **every attribute value and child (recursively) is a scalar literal**. No dynamic holes anywhere.
+
+**Emitted code:**
+```js
+const _tmpl$ = /*#__PURE__*/ template('<div class="row"><span>hello</span></div>')
+// per render site:
+_tmpl$.cloneNode(true)
+```
+
+**Runtime cost per instance:** one native `cloneNode(true)`. The DOM skeleton is parsed once at module load via `innerHTML`; no `createElement`, no per-attribute writes, no per-child append.
+
+### 2. Template clone with holes
+
+**Trigger:** foldable skeleton (same rules as path 1) but with **dynamic attribute values and/or dynamic children**. Static parts fold into the template string; dynamic parts become `setProp` / `insert` ops.
+
+**Emitted code:**
+```js
+const _tmpl$ = template('<div class="row"><span></span></div>')
+// per render site:
+(() => {
+  const _el = _tmpl$.cloneNode(true)
+  const _span = _el.firstChild
+  insert(_span, () => count())
+  return _el
+})()
+```
+
+**Runtime cost per instance:** `cloneNode(true)` + N hole patches. Skips `createElement` and `applyProps` for the static skeleton; only the dynamic holes pay reactive-wrapper cost.
+
+### 3. `jsxStatic` (single element, all-literal attrs)
+
+**Trigger:** lowercase intrinsic tag, no spread, **every attribute value is a scalar literal** (string / number / boolean / null). Children are unconstrained — they pass through the normal `jsx` pipeline as the third argument, so dynamic / component / nested-JSX children are fine. Reached when path 2's whole-subtree foldability declined (typically because babel chose the single-call form for a standalone element).
+
+**Emitted code:**
+```js
+jsxStatic('div', { class: 'row' }, () => count())
+```
+
+**Runtime cost per instance:** `createElement` + one direct DOM write per attribute (no `isReactive` check, no binding-effect wrapper, no `mergeProps` proxy). Children flow through `appendChild`'s usual reactive/defer paths.
+
+### 4. `jsx` / `mergeProps` (general path)
+
+**Trigger:** everything else. In particular:
+- Capitalized tag (`<Foo />`) → component invocation
+- `JSXMemberExpression` (`<obj.Foo />`)
+- `<Dynamic component={...} />`
+- Fragment (`<>...</>`)
+- Intrinsic tag with **any spread attribute**
+- Intrinsic tag with no spread but at least one **non-literal attribute value** (and the subtree wasn't foldable for path 2)
+
+**Emitted code:**
+```js
+jsx(Tag, mergeProps({ class: 'row' }, () => ({ id: id() }), { children: ... }))
+```
+
+**Runtime cost per instance:** full reactive dispatch — `mergeProps` proxy, per-prop `isReactive` / binding-effect wrapping, `applyProps` with `JSX_PROP_MAP` lookups, recursive child handling.
+
+### Summary
+
+| # | Path | Tag | Spread allowed | Attr values | Children | Per-instance work |
+|---|---|---|---|---|---|---|
+| 1 | template (pure) | intrinsic | no | all literal | all literal (recursive) | `cloneNode` |
+| 2 | template + holes | intrinsic | no | any | any | `cloneNode` + hole ops |
+| 3 | `jsxStatic` | intrinsic | no | all scalar literal | any | `createElement` + direct attr writes |
+| 4 | `jsx` / `mergeProps` | any | yes | any | any | full reactive dispatch |
+
+Rule of thumb: **non-intrinsic tags always go through path 4**. The fast paths exist only because lowercase intrinsics map 1:1 to DOM elements and don't need component invocation or descriptor materialization.
+
 ## Reactivity
 
 Plastic's reactivity layer is built on top of [alien-signals](https://github.com/stackblitz/alien-signals) and extends it with deep object reactivity. All primitives are exported from `jsx`.
@@ -147,6 +229,30 @@ count(1)                             // logs 1
 ```
 
 Passing an existing signal returns it unchanged — double-wrapping is a no-op.
+
+##### Signal as a JSX child: prefer `{count}` over `{count()}`
+
+When a signal is used directly as a JSX child, the two forms below are **behaviorally equivalent** — both produce a reactive child that re-renders when the signal updates — but the bare-identifier form is the **recommended** style:
+
+```jsx
+const count = createSignal(0)
+
+<span>{count}</span>     // ✅ Recommended — Identifier passed through as-is (signal is itself a function)
+<span>{count()}</span>   // ⚠️ Discouraged — CallExpression that Babel must wrap as `() => count()`
+```
+
+Why they behave the same:
+
+- The `babel-preset-plastic` reactive transform classifies identifiers as *static* and emits them unchanged, while call expressions are not static and get wrapped in a thunk (`() => count()`).
+- At runtime, `appendChild` detects any child whose `typeof === 'function'` and routes it through the reactive child path — creating a placeholder, subscribing to signal reads, and patching the DOM on change.
+
+Why prefer `{count}`:
+
+- One fewer function call per update (the `{count()}` form invokes the thunk, which then invokes the signal).
+- Slightly smaller compiled output (no synthesized `() => ...` wrapper).
+- Makes the "signal flows through as a reactive citizen" model explicit at the call site, instead of looking like an eager read.
+
+> This equivalence relies on `count` being a signal (a callable function). For a plain variable (`const count = 2`), `{count}` is a static value and `{count()}` would throw — they are *not* interchangeable in that case.
 
 #### `createComputed(fn)`
 
