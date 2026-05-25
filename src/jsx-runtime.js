@@ -641,14 +641,17 @@ const disposeBindings = (bindings)=> {
 // free. The value is resolved through `resolveReactiveValue` so signals and
 // zero-arg accessor thunks (used widely by ark-plastic / zag adapters) are
 // unwrapped before being applied to the DOM.
-const bindReactiveProp = (element, props, key)=> {
+const bindReactiveProp = (element, props, key, propsIsTracked)=> {
 	const rawValue = props[key]
 
 	// Static (non-reactive) fast path: write the prop directly with no binding
 	// effect. Most JSX props in real apps are static (className='row', id=...,
 	// type='button' etc.) — building an effect for each one was the biggest
 	// per-component cost in mount benchmarks.
-	if (!isReactive(rawValue)){
+	// Skip the fast path when `props` is itself a tracking proxy (tree /
+	// mergeProps): the value may be a plain string but reading `props[key]`
+	// subscribes through the proxy, so we need an effect to re-run on change.
+	if (!propsIsTracked && !isReactive(rawValue)){
 		let prevStyleValue
 		if (key === 'className' || key === 'class'){
 			applyClassProp(element, rawValue)
@@ -748,6 +751,7 @@ const bindReactiveEvent = (element, props, key)=> {
 // keys later we tear down the previous bindings and rebuild them from the
 // current key set.
 const applyProps = (element, props = {})=> {
+	const propsIsTracked = isMergedProps(props) || isTree(props)
 	const setup = ()=> {
 		const bindings = []
 		// Only register cleanup if there's an owner/computation to attach to.
@@ -779,16 +783,17 @@ const applyProps = (element, props = {})=> {
 				bindings.push(bindReactiveEvent(element, props, key))
 				continue
 			}
-			bindings.push(bindReactiveProp(element, props, key))
+			bindings.push(bindReactiveProp(element, props, key, propsIsTracked))
 		}
 	}
 
 	// Only wrap in an outer binding effect when the proxy has dynamic keys (a
-	// function-typed spread source like `{...api()}`). For static-key proxies
-	// (the common babel reactive transform output with no spreads), and for
-	// plain object props, keys never change — skip the outer effect to avoid
-	// one owner-effect allocation per element.
-	if (isMergedProps(props) && !hasMergedPropsStaticKeys(props)){
+	// function-typed spread source like `{...api()}`, or any tree proxy whose
+	// key set may grow/shrink at runtime). For static-key proxies (the common
+	// babel reactive transform output with no spreads), and for plain object
+	// props, keys never change — skip the outer effect to avoid one
+	// owner-effect allocation per element.
+	if ((isMergedProps(props) && !hasMergedPropsStaticKeys(props)) || isTree(props)){
 		createBindingEffect(setup)
 	} else {
 		setup()
