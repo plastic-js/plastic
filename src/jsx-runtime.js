@@ -1230,6 +1230,46 @@ const insert = (parent, accessor, marker = null)=> {
 // change. Class and style go through the existing helpers so the
 // merge/diff semantics stay identical to the JSX path.
 const setProp = (element, key, accessor)=> {
+	// Event handlers (onClick, etc.) — the babel transform emits them as
+	// `() => handler` thunks. Resolve once to the handler and attach a single
+	// listener that re-reads the current accessor at dispatch time (so a signal
+	// returning different handlers stays live without re-attaching).
+	if (isEventProp(key)){
+		const eventName = key.slice(2).toLowerCase()
+		if (!isSupportedEvent(element, eventName)){
+			return
+		}
+		// The babel transform wraps identifier accessors as `() => handler`
+		// (a thunk that returns the real handler), but passes arrow/function
+		// expressions through verbatim (those *are* the handler). Probe once
+		// to figure out which shape we have, then dispatch accordingly.
+		// Re-read each event so identifier-bound handlers stay live if the
+		// outer binding swaps the reference.
+		let useUnwrap = false
+		if (typeof accessor === 'function'){
+			try {
+				const probe = accessor()
+				if (typeof probe === 'function'){
+					useUnwrap = true
+				}
+			} catch {
+				// arrow that throws when called outside of an event — treat as handler
+			}
+		}
+		const listener = (...args)=> {
+			const handler = useUnwrap ? accessor() : accessor
+			if (typeof handler === 'function'){
+				handler(...args)
+			}
+		}
+		element.addEventListener(eventName, listener)
+		if (currentOwner || getCurrentComputation()){
+			registerCleanup(()=> {
+				element.removeEventListener(eventName, listener)
+			})
+		}
+		return
+	}
 	if (typeof accessor !== 'function' || isReactivePrimitive(accessor)){
 		// Reactive primitives (signal/computed) also go through the effect path
 		// so the prop stays in sync — handled in the else branch below.
