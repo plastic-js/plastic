@@ -841,6 +841,18 @@ const applyProps = (element, props = {})=> {
 	// Only wrap in an outer binding effect when the proxy has dynamic keys (a
 	// function-typed spread source like `{...api()}`, or any tree proxy whose
 	// key set may grow/shrink at runtime). For static-key proxies (the common
+	//
+	// KNOWN LIMITATION: `hasStaticKeys` is decided at `mergeProps()` construction
+	// time and reflects only whether any *source* is function-typed. A plain
+	// object source can still be mutated later (`Object.assign(propsBag, {...})`
+	// or `delete propsBag.foo`), and that mutation will NOT trigger re-binding —
+	// the outer key-tracking effect is skipped for static-key proxies. This is
+	// safe under the babel reactive transform (it never mutates a props bag
+	// post-creation) but callers using `h(Comp, propsBag)` and later mutating
+	// `propsBag` must instead pass a function source so the proxy becomes
+	// dynamic: `h(Comp, mergeProps(() => propsBag))`.
+	// For plain (non-mergeProps) object props, the key set is captured once via
+	// `Reflect.ownKeys(props)` at construction; the same restriction applies.
 	// babel reactive transform output with no spreads), and for plain object
 	// props, keys never change — skip the outer effect to avoid one
 	// owner-effect allocation per element.
@@ -878,8 +890,11 @@ const node2Element = (node)=> {
 		case 'object': {
 			if (node === null) return createPlaceholder()
 			// Real DOM node returned from h()/jsx() — by far the most common
-			// 'object' case during initial mount.
-			if (node.nodeType != null){
+			// 'object' case during initial mount. `nodeType` must be a number
+			// (Node spec: unsigned short); a plain object happening to carry a
+			// non-numeric `nodeType` field would otherwise be treated as a Node
+			// here and explode downstream inside parent.appendChild.
+			if (typeof node.nodeType === 'number'){
 				flushPendingDescriptors(node)
 				return node
 			}
@@ -1378,9 +1393,13 @@ const disposeOwnedSubtree = (node)=> {
 	// Dispose top-most owners first (parents before children).
 	// disposeOwner handles children recursively, so disposing a parent
 	// covers its entire subtree. We only need to fire each unique root.
+	// Use a Set for O(1) parent-membership lookups — `Array.includes`
+	// degenerates to O(n²) total work on large unmounts (Loop with thousands
+	// of items).
+	const ownerSet = new Set(owners)
 	const seen = new Set()
 	for (const o of owners){
-		if (!o.parent || !owners.includes(o.parent)){
+		if (!o.parent || !ownerSet.has(o.parent)){
 			if (!seen.has(o)){
 				seen.add(o)
 				disposeOwner(o)
