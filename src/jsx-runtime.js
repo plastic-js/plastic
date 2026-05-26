@@ -652,7 +652,14 @@ const bindReactiveProp = (element, props, key, propsIsTracked)=> {
 	// Skip the fast path when `props` is itself a tracking proxy (tree /
 	// mergeProps): the value may be a plain string but reading `props[key]`
 	// subscribes through the proxy, so we need an effect to re-run on change.
-	if (!propsIsTracked && !isReactive(rawValue)){
+	// Also skip when `props[key]` is exposed via a getter — the getter may
+	// read signals internally (hand-rolled adapter props bags do this), so
+	// the read must happen inside a binding effect to register the
+	// dependency. `getOwnPropertyDescriptor` returns `{ get }` for accessor
+	// properties and `{ value }` for data properties.
+	const descriptor = propsIsTracked ? null : Object.getOwnPropertyDescriptor(props, key)
+	const hasGetter = descriptor != null && typeof descriptor.get === 'function'
+	if (!propsIsTracked && !hasGetter && !isReactive(rawValue)){
 		let prevStyleValue
 		if (key === 'className' || key === 'class'){
 			applyClassProp(element, rawValue)
