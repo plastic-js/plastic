@@ -1339,26 +1339,52 @@ const setProp = (element, key, accessor)=> {
 	})
 }
 
+// Walk a DOM subtree and dispose every component owner found.
+// Handles native-rooted trees where the root node has no OWNER reference.
+const disposeOwnedSubtree = (node)=> {
+	if (!(node instanceof Node)){ return }
+	const owners = []
+	const stack = [node]
+	while (stack.length){
+		const current = stack.pop()
+		const owner = current[OWNER]
+		if (owner){
+			owners.push(owner)
+		}
+		for (const child of current.childNodes){
+			stack.push(child)
+		}
+	}
+	// Dispose top-most owners first (parents before children).
+	// disposeOwner handles children recursively, so disposing a parent
+	// covers its entire subtree. We only need to fire each unique root.
+	const seen = new Set()
+	for (const o of owners){
+		if (!o.parent || !owners.includes(o.parent)){
+			if (!seen.has(o)){
+				seen.add(o)
+				disposeOwner(o)
+			}
+		}
+	}
+}
+
 // Render by appending the normalized root node into the target container.
 // Returns a disposer function that cleans up all effects and listeners.
 const renderApp = (container, node)=> {
 	const appNode = node2Element(node)
 	container.appendChild(appNode)
-	// Get the owner from the node (set by h() when rendering components)
-	const owner = appNode[OWNER]
-	// Execute root onMount callbacks if owner exists
-	if (owner){
-		runOwnerMounts(owner)
-	}
+	// Walk the full DOM subtree to find all component owners and fire their
+	// onMount callbacks. The root node may be a native element (e.g. <div>)
+	// which never gets an OWNER reference, but nested component outputs do.
+	mountOwnedSubtree(appNode)
 
 	// Return a disposer function
 	let disposed = false
 	const dispose = ()=> {
 		if (disposed){ return }
 		disposed = true
-		if (owner){
-			disposeOwner(owner)
-		}
+		disposeOwnedSubtree(appNode)
 		if (appNode.parentNode === container){
 			container.removeChild(appNode)
 		}
