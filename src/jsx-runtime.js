@@ -1264,6 +1264,18 @@ const insert = (parent, accessor, marker = null)=> {
 // change. Class and style go through the existing helpers so the
 // merge/diff semantics stay identical to the JSX path.
 const setProp = (element, key, accessor)=> {
+	if (key === 'ref'){
+		// babel-preset-plastic's template fast path emits identifier refs as
+		// `() => refCallback` thunks (0-arity), but passes inline arrow/function
+		// expressions through verbatim (>= 1-arity). Distinguish by arity so
+		// both shapes work without probing (which would invoke a direct callback
+		// with undefined).
+		const ref = typeof accessor === 'function' && accessor.length === 0
+			? accessor()
+			: accessor
+		applyRefProp(element, ref)
+		return
+	}
 	// Event handlers (onClick, etc.) — the babel transform emits them as
 	// `() => handler` thunks. Resolve once to the handler and attach a single
 	// listener that re-reads the current accessor at dispatch time (so a signal
