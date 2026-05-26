@@ -813,6 +813,7 @@ const NavLink = ({
 	activeClass = 'active',
 	ariaCurrent = 'page',
 	end = false,
+	disabled = false,
 	...props
 })=> {
 	const location = useLocation()
@@ -830,10 +831,18 @@ const NavLink = ({
 	})
 	const resolvedClassName = ()=> {
 		const baseClassName = typeof className === 'function' ? className() : className
-		const tokens = [baseClassName, isActive() ? activeClass : '']
+		const tokens = [baseClassName, isActive() && !disabled ? activeClass : '']
 			.filter(value=> typeof value === 'string' && value.trim())
 			.map(value=> value.trim())
 		return tokens.join(' ')
+	}
+
+	if (disabled){
+		return h('span', {
+			...props,
+			'aria-disabled': 'true',
+			className: resolvedClassName,
+		}, children)
 	}
 
 	return h(Link, {
