@@ -625,15 +625,6 @@ const applyRefProp = (element, ref)=> {
 	}
 }
 
-const disposeBindings = (bindings)=> {
-	;[...bindings].reverse().forEach((dispose)=> {
-		if (typeof dispose === 'function'){
-			dispose()
-		}
-	})
-	bindings.length = 0
-}
-
 // Bind a single non-event, non-special prop key to the DOM element. Each
 // individual prop runs inside its own binding effect so a signal change in
 // one prop's getter only re-writes that one attribute. For plain (non-proxy)
@@ -752,39 +743,82 @@ const bindReactiveEvent = (element, props, key)=> {
 // current key set.
 const applyProps = (element, props = {})=> {
 	const propsIsTracked = isMergedProps(props) || isTree(props)
-	const setup = ()=> {
-		const bindings = []
-		// Only register cleanup if there's an owner/computation to attach to.
-		// Allows top-level h() calls outside any component scope (e.g. tests).
-		if (currentOwner || getCurrentComputation()){
-			registerCleanup(()=> {
-				disposeBindings(bindings)
-			})
-		}
+	// Per-key disposer map. Re-runs of the outer key-tracking effect diff the
+	// previous and current key set so only added/removed keys touch the DOM;
+	// surviving keys keep their per-prop binding (which already short-circuits
+	// on prev===next inside setDomProp). Tearing down all bindings on every
+	// signal change was the cause of NO-OP attribute thrash on Zag widgets.
+	const bindings = new Map()
 
+	const createBindingForKey = (key)=> {
+		if (key === 'classList'){
+			throw new Error('classList prop is not supported. Use className instead.')
+		}
+		// Suppress the outer effect's computation context so inner
+		// registerCleanup calls (event listeners, ref nulling) attach to the
+		// owner rather than the outer effect's per-run cleanup list. Otherwise
+		// flushCleanups on the next outer re-run would tear down listeners for
+		// keys we intend to keep.
+		// Also clear alien-signals' activeSub so each per-key inner effect is
+		// a root effect, not a child of the outer key-tracking effect — child
+		// effects get auto-disposed when the parent re-runs, which would kill
+		// surviving keys' bindings.
+		const prevComp = getCurrentComputation()
+		const prevSub = getActiveSub()
+		setCurrentComputation(null)
+		setActiveSub(undefined)
+		try {
+			if (key === 'ref'){
+				const ref = props[key]
+				applyRefProp(element, ref)
+				return ()=> {
+					if (typeof ref === 'function'){
+						ref(null)
+					}
+				}
+			}
+			if (isEventProp(key)){
+				return bindReactiveEvent(element, props, key)
+			}
+			return bindReactiveProp(element, props, key, propsIsTracked)
+		} finally {
+			setCurrentComputation(prevComp)
+			setActiveSub(prevSub)
+		}
+	}
+
+	const setup = ()=> {
+		const nextKeys = new Set()
 		for (const key of Reflect.ownKeys(props)){
 			if (typeof key === 'symbol' || key === 'children' || key === 'key'){
 				continue
 			}
-			if (key === 'classList'){
-				throw new Error('classList prop is not supported. Use className instead.')
-			}
-			if (key === 'ref'){
-				const ref = props[key]
-				applyRefProp(element, ref)
-				bindings.push(()=> {
-					if (typeof ref === 'function'){
-						ref(null)
-					}
-				})
-				continue
-			}
-			if (isEventProp(key)){
-				bindings.push(bindReactiveEvent(element, props, key))
-				continue
-			}
-			bindings.push(bindReactiveProp(element, props, key, propsIsTracked))
+			nextKeys.add(key)
 		}
+
+		// Dispose bindings for keys that disappeared. Surviving keys are left
+		// alone — their inner binding effects already react to value changes.
+		for (const [key, dispose] of bindings){
+			if (nextKeys.has(key)) continue
+			if (typeof dispose === 'function') dispose()
+			bindings.delete(key)
+		}
+
+		for (const key of nextKeys){
+			if (bindings.has(key)) continue
+			bindings.set(key, createBindingForKey(key))
+		}
+	}
+
+	// Register full teardown at the owner level (not the outer effect's local
+	// cleanup list) so it fires only on real unmount.
+	if (currentOwner || getCurrentComputation()){
+		registerCleanup(()=> {
+			for (const dispose of bindings.values()){
+				if (typeof dispose === 'function') dispose()
+			}
+			bindings.clear()
+		})
 	}
 
 	// Only wrap in an outer binding effect when the proxy has dynamic keys (a

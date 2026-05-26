@@ -1723,3 +1723,180 @@ describe('DOM template cloning (template / insert / setProp)', ()=> {
 	})
 })
 
+// A bug entroduced, on 2026-05-12, in the commit 7e236eb "feat: add mergeProps and splitProps":
+// Regression tests for the dynamic-key proxy path in applyProps. Two bugs
+// historically lived here:
+//   1. The outer key-tracking effect tore down and rebuilt every per-key
+//      binding on each re-run, generating remove+add mutations for every
+//      attribute even when only one value actually changed.
+//   2. Per-key inner effects were nested under the outer effect as alien-signals
+//      children, so the outer re-run auto-disposed them — surviving keys went
+//      dead and stopped reflecting subsequent signal changes.
+describe('applyProps dynamic-key proxy: DOM mutation minimality', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	const observe = (root)=> {
+		const observer = new MutationObserver(()=> {})
+		observer.observe(root, {
+			attributes: true,
+			attributeOldValue: true,
+			childList: true,
+			subtree: true,
+			characterData: true,
+		})
+		return {
+			drain: ()=> observer.takeRecords(),
+			stop: ()=> observer.disconnect(),
+		}
+	}
+
+	const mountDynamicKeyElement = (state)=> {
+		// mergeProps with a function source forces the dynamic-key path
+		// (hasMergedPropsStaticKeys === false). The source function reads the
+		// signal, so the outer key-tracking effect subscribes to it and re-runs
+		// on every state change — same shape as `mergeProps(() => api().getRootProps(), ...)`.
+		const dynamicSource = ()=> ({
+			'data-state': state() === 'on' ? 'checked' : 'unchecked',
+			'aria-pressed': state() === 'on' ? 'true' : 'false',
+		})
+		const staticSource = {
+			id: 'root',
+			'data-scope': 'checkbox',
+			'data-part': 'control',
+			dir: 'ltr',
+		}
+		const el = h('div', mergeProps(dynamicSource, staticSource))
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, el)
+		return el
+	}
+
+	it('changes exactly the attributes whose values actually changed', ()=> {
+		const state = createSignal('off')
+		const el = mountDynamicKeyElement(state)
+
+		expect(el.getAttribute('data-state')).toBe('unchecked')
+		expect(el.getAttribute('aria-pressed')).toBe('false')
+		expect(el.getAttribute('data-scope')).toBe('checkbox')
+
+		const mo = observe(el)
+		state('on')
+		const records = mo.drain()
+		mo.stop()
+
+		expect(el.getAttribute('data-state')).toBe('checked')
+		expect(el.getAttribute('aria-pressed')).toBe('true')
+
+		const touched = records.filter(r=> r.type === 'attributes').map(r=> r.attributeName)
+		expect(touched).not.toContain('data-scope')
+		expect(touched).not.toContain('data-part')
+		expect(touched).not.toContain('dir')
+		expect(touched).not.toContain('id')
+
+		// Pre-fix this list contained ~12 entries (every attribute remove+add)
+		// per toggle. Only the two attributes whose values flipped should appear.
+		expect(touched.sort()).toEqual(['aria-pressed', 'data-state'])
+	})
+
+	it('produces zero NO-OP attribute writes (same-value re-assignments)', ()=> {
+		const state = createSignal('off')
+		const el = mountDynamicKeyElement(state)
+
+		const mo = observe(el)
+		state('on')
+		const records = mo.drain()
+		mo.stop()
+
+		const noOps = records.filter(r=> r.type === 'attributes' && r.oldValue === el.getAttribute(r.attributeName))
+		expect(noOps).toEqual([])
+	})
+
+	it('produces zero childList mutations on prop-only updates', ()=> {
+		const state = createSignal('off')
+		const el = mountDynamicKeyElement(state)
+
+		const mo = observe(el)
+		state('on')
+		state('off')
+		state('on')
+		const records = mo.drain()
+		mo.stop()
+
+		const childListRecords = records.filter(r=> r.type === 'childList')
+		expect(childListRecords).toEqual([])
+	})
+
+	it('keeps surviving keys reactive across multiple outer re-runs (regression: nested inner effects)', ()=> {
+		// Bug-2 trap: alien-signals would auto-dispose nested per-key effects
+		// on the first outer re-run, leaving stale entries in the bindings map
+		// — the second toggle's value never reached the DOM.
+		const state = createSignal('off')
+		const el = mountDynamicKeyElement(state)
+
+		state('on')
+		expect(el.getAttribute('data-state')).toBe('checked')
+
+		state('off')
+		expect(el.getAttribute('data-state')).toBe('unchecked')
+
+		state('on')
+		expect(el.getAttribute('data-state')).toBe('checked')
+	})
+
+	it('preserves child node identity across attribute updates', ()=> {
+		const state = createSignal('off')
+		const dynamicSource = ()=> ({
+			'data-state': state() === 'on' ? 'checked' : 'unchecked',
+		})
+		const el = h('div', mergeProps(dynamicSource, { id: 'root' }),
+			h('span', { id: 'a' }, 'A'),
+			h('span', { id: 'b' }, 'B'),
+		)
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, el)
+
+		const before = [...el.childNodes]
+		state('on')
+		state('off')
+		const after = [...el.childNodes]
+
+		expect(after.length).toBe(before.length)
+		after.forEach((node, i)=> {
+			expect(node).toBe(before[i])
+		})
+	})
+
+	it('disposes a removed key exactly once and leaves surviving keys untouched', ()=> {
+		const keys = createSignal(['data-state', 'data-extra'])
+		const dynamicSource = ()=> {
+			const out = {}
+			for (const k of keys()){
+				out[k] = k === 'data-state' ? 'unchecked' : 'present'
+			}
+			return out
+		}
+		const el = h('div', mergeProps(dynamicSource, { id: 'root' }))
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, el)
+
+		expect(el.getAttribute('data-extra')).toBe('present')
+
+		const mo = observe(el)
+		keys(['data-state'])
+		const records = mo.drain()
+		mo.stop()
+
+		expect(el.hasAttribute('data-extra')).toBe(false)
+
+		const touched = records.filter(r=> r.type === 'attributes').map(r=> r.attributeName)
+		expect(touched).toContain('data-extra')
+		expect(touched).not.toContain('data-state')
+		expect(touched).not.toContain('id')
+	})
+})
+
