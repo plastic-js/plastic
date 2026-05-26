@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import babel from 'vite-plugin-babel'
 import path from 'path'
-import plasticJsx from 'babel-preset-plastic'
+import plasticJsx from '@plastic-js/babel-preset-plastic'
 
 export default defineConfig({
 	root: 'showcase',

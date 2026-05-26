@@ -4,8 +4,8 @@ import babel from 'vite-plugin-babel'
 import react from '@vitejs/plugin-react'
 import vue from '@vitejs/plugin-vue'
 import solid from 'vite-plugin-solid'
-import babelReactive from 'babel-preset-plastic/reactive'
-import babelControlFlow from 'babel-preset-plastic/control-flow'
+import babelReactive from '@plastic-js/babel-preset-plastic/reactive'
+import babelControlFlow from '@plastic-js/babel-preset-plastic/control-flow'
 
 const here = path.resolve(__dirname)
 

@@ -130,7 +130,7 @@ The Babel plugin rejects duplicate attribute names on the same JSX element at **
 
 ## JSX Compilation Paths
 
-The `babel-preset-plastic` reactive transform inspects every JSX element and lowers it to one of four runtime shapes. Paths are tried top-to-bottom; the first match wins. Earlier paths are strictly cheaper at runtime, so the transform always picks the most specialized form an element qualifies for.
+The `@plastic-js/babel-preset-plastic` reactive transform inspects every JSX element and lowers it to one of four runtime shapes. Paths are tried top-to-bottom; the first match wins. Earlier paths are strictly cheaper at runtime, so the transform always picks the most specialized form an element qualifies for.
 
 The plugin's decision cascade in one line:
 
@@ -243,7 +243,7 @@ const count = createSignal(0)
 
 Why they behave the same:
 
-- The `babel-preset-plastic` reactive transform classifies identifiers as *static* and emits them unchanged, while call expressions are not static and get wrapped in a thunk (`() => count()`).
+- The `@plastic-js/babel-preset-plastic` reactive transform classifies identifiers as *static* and emits them unchanged, while call expressions are not static and get wrapped in a thunk (`() => count()`).
 - At runtime, `appendChild` detects any child whose `typeof === 'function'` and routes it through the reactive child path — creating a placeholder, subscribing to signal reads, and patching the DOM on change.
 
 Why prefer `{count}`:
@@ -350,14 +350,14 @@ toRaw(state)    // { x: 1 }
 
 ### Installation
 
-Install Plastic together with its Babel toolchain. Plastic's JSX compiles in two stages: `@babel/preset-react` turns JSX into `jsx(...)` calls against Plastic's runtime, then `babel-preset-plastic` rewrites those calls for fine-grained reactivity (control-flow lifting, `mergeProps`, etc.).
+Install Plastic together with its Babel toolchain. Plastic's JSX compiles in two stages: `@babel/preset-react` turns JSX into `jsx(...)` calls against Plastic's runtime, then `@plastic-js/babel-preset-plastic` rewrites those calls for fine-grained reactivity (control-flow lifting, `mergeProps`, etc.).
 
 ```bash
 npm install @plastic-js/plastic
 npm install --save-dev \
     @babel/core \
     @babel/preset-react \
-    babel-preset-plastic \
+    @plastic-js/babel-preset-plastic \
     vite-plugin-babel
 ```
 
@@ -366,7 +366,7 @@ Then wire the presets up in `vite.config.js`:
 ```js
 import { defineConfig } from 'vite'
 import babel from 'vite-plugin-babel'
-import plasticJsx from 'babel-preset-plastic'
+import plasticJsx from '@plastic-js/babel-preset-plastic'
 
 export default defineConfig({
     plugins: [
