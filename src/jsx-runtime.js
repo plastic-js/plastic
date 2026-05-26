@@ -1295,27 +1295,30 @@ const setProp = (element, key, accessor)=> {
 		if (!isSupportedEvent(element, eventName)){
 			return
 		}
-		// The babel transform wraps identifier accessors as `() => handler`
-		// (a thunk that returns the real handler), but passes arrow/function
-		// expressions through verbatim (those *are* the handler). Probe once
-		// to figure out which shape we have, then dispatch accordingly.
-		// Re-read each event so identifier-bound handlers stay live if the
-		// outer binding swaps the reference.
-		let useUnwrap = false
-		if (typeof accessor === 'function'){
-			try {
-				const probe = accessor()
-				if (typeof probe === 'function'){
-					useUnwrap = true
-				}
-			} catch {
-				// arrow that throws when called outside of an event — treat as handler
-			}
-		}
+		// The babel transform wraps identifier accessors as `() => handler` thunks
+		// so a later signal update swapping the handler reference stays live
+		// without re-attaching. Arrow/function expressions written inline are
+		// passed through verbatim and *are* the handler.
+		//
+		// Previously we probed `accessor()` once at attach time to decide which
+		// shape we had. That broke whenever the handler was undefined / not yet
+		// resolved at attach time (e.g. `() => api.onPress` where `api.onPress`
+		// is populated later by a signal or async init): probe returned a non-fn,
+		// useUnwrap stayed false forever, dispatch then invoked the thunk itself
+		// (discarding its return value) and the real handler never fired. The
+		// probe also caused observable side effects on attach.
+		//
+		// Instead: at dispatch time, if the accessor is a thunk (returns a
+		// function), unwrap once and call the result; otherwise call the
+		// accessor directly. Reactive primitives (signal/computed) follow the
+		// same shape — they're functions returning the current value.
 		const listener = (...args)=> {
-			const handler = useUnwrap ? accessor() : accessor
+			let handler = accessor
 			if (typeof handler === 'function'){
-				handler(...args)
+				const unwrapped = handler(...args)
+				if (typeof unwrapped === 'function'){
+					unwrapped(...args)
+				}
 			}
 		}
 		element.addEventListener(eventName, listener)
