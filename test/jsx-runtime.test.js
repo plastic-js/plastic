@@ -1290,6 +1290,103 @@ describe('onMount in reactive branches (regression: e0181d0)', ()=> {
 	})
 })
 
+describe('onMount when a component returns a thunk (regression: OWNER lost on drained fragment)', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('fires onMount for a component whose body returns a function', ()=> {
+		const mountSpy = vi.fn()
+
+		const Comp = ()=> {
+			onMount(mountSpy)
+			return ()=> h('div', null, 'hi')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Comp))
+
+		expect(container.textContent).toBe('hi')
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('fires onMount for thunk-returning component that depends on a signal', ()=> {
+		const mountSpy = vi.fn()
+		const show = createSignal(true)
+
+		const Comp = ()=> {
+			onMount(mountSpy)
+			return ()=> show() ? h('div', null, 'yes') : null
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Comp))
+
+		expect(container.textContent).toBe('yes')
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+
+		show(false)
+		expect(container.textContent).toBe('')
+		// onMount must not fire again on signal-driven re-render
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('fires onCleanup for thunk-returning component on dispose', ()=> {
+		const cleanupSpy = vi.fn()
+
+		const Comp = ()=> {
+			onCleanup(cleanupSpy)
+			return ()=> h('div', null, 'bye')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		const dispose = renderApp(container, h(Comp))
+
+		expect(cleanupSpy).toHaveBeenCalledTimes(0)
+		dispose()
+		expect(cleanupSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('fires onMount for a nested thunk-returning component', ()=> {
+		const parentMount = vi.fn()
+		const childMount = vi.fn()
+
+		const Child = ()=> {
+			onMount(childMount)
+			return ()=> h('span', null, 'child')
+		}
+
+		const Parent = ()=> {
+			onMount(parentMount)
+			return h('div', null, h(Child))
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		expect(container.textContent).toBe('child')
+		expect(parentMount).toHaveBeenCalledTimes(1)
+		expect(childMount).toHaveBeenCalledTimes(1)
+	})
+
+	it('runs ref callback for thunk-returning component', ()=> {
+		const refSpy = vi.fn()
+
+		const Comp = ()=> ()=> h('div', { ref: refSpy }, 'x')
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Comp))
+
+		expect(refSpy).toHaveBeenCalledTimes(1)
+		expect(refSpy.mock.calls[0][0]).toBeInstanceOf(HTMLDivElement)
+	})
+})
+
 describe('control flow: Either and mountDynamic', ()=> {
 	afterEach(()=> {
 		document.body.innerHTML = ''

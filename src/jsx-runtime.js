@@ -353,7 +353,17 @@ const materializeComponentDescriptor = (descriptor)=> {
 		setActiveSub(prevSub)
 	}
 
-	if (normalized instanceof Node){
+	if (normalized instanceof DocumentFragment){
+		// A fragment is drained the moment it is appended into its parent, so an
+		// OWNER assigned on the fragment itself would be lost. Anchor it on the
+		// fragment's first child instead — that node stays connected in the live
+		// DOM at the component's position, and mountOwnedSubtree's childNodes
+		// walk picks it up. createReactiveChildNode emits a stable
+		// `dynamic-start` comment as firstChild for this exact purpose.
+		if (normalized.firstChild){
+			normalized.firstChild[OWNER] = owner
+		}
+	} else if (normalized instanceof Node){
 		normalized[OWNER] = owner
 	}
 
@@ -1373,21 +1383,28 @@ const disposeOwnedSubtree = (node)=> {
 // Returns a disposer function that cleans up all effects and listeners.
 const renderApp = (container, node)=> {
 	const appNode = node2Element(node)
+	// Capture the actual placed nodes before appendChild — when appNode is a
+	// DocumentFragment (e.g. a component returning a thunk routes through
+	// createReactiveChildNode), it is drained on insertion and would no longer
+	// reference its children, hiding any OWNER attached deeper in the subtree.
+	const placedNodes = appNode instanceof DocumentFragment ? [...appNode.childNodes] : [appNode]
 	container.appendChild(appNode)
 	// Walk the full DOM subtree to find all component owners and fire their
 	// onMount callbacks. The root node may be a native element (e.g. <div>)
 	// which never gets an OWNER reference, but nested component outputs do.
-	mountOwnedSubtree(appNode)
+	placedNodes.forEach(n=> mountOwnedSubtree(n))
 
 	// Return a disposer function
 	let disposed = false
 	const dispose = ()=> {
 		if (disposed){ return }
 		disposed = true
-		disposeOwnedSubtree(appNode)
-		if (appNode.parentNode === container){
-			container.removeChild(appNode)
-		}
+		placedNodes.forEach(n=> disposeOwnedSubtree(n))
+		placedNodes.forEach((n)=> {
+			if (n.parentNode === container){
+				container.removeChild(n)
+			}
+		})
 	}
 
 	return dispose
