@@ -28,6 +28,8 @@ import {
 	template,
 	onMount,
 	renderApp,
+	runOwnerMounts,
+	runWithOwner,
 	useContext,
 } from '../src/jsx-runtime.js'
 import { onCleanup } from '../src/index.js'
@@ -801,6 +803,72 @@ describe('lifecycle & cleanup management', ()=> {
 		expect(order).toEqual(['child', 'parent'])
 	})
 
+	it('onMount fires when root is a native element wrapping a component — regression: renderApp only checked appNode[OWNER]', ()=> {
+		const mountSpy = vi.fn()
+		const Child = ()=> {
+			onMount(mountSpy)
+			return h('span', null, 'child')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h('div', { class: 'app' }, h(Child)))
+
+		expect(container.textContent).toBe('child')
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('onMount fires for deeply nested component inside multiple native wrappers', ()=> {
+		const mountSpy = vi.fn()
+		const Inner = ()=> {
+			onMount(mountSpy)
+			return h('b', null, 'deep')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h('main', null, h('section', null, h('div', null, h(Inner)))))
+
+		expect(container.textContent).toBe('deep')
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('onMount fires for components inside mountDynamic when root is a native element', ()=> {
+		const mountSpy = vi.fn()
+		const Branch = ()=> {
+			onMount(mountSpy)
+			return h('p', null, 'branch')
+		}
+
+		const App = ()=> h('section', null, h(Either, {
+			condition: true,
+			trueBranch: ()=> h(True, null, h(Branch)),
+			falseBranch: ()=> h('span', null, 'fallback'),
+		}))
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h('div', { class: 'root' }, h(App)))
+
+		expect(container.textContent).toContain('branch')
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('onMount fires for components rendered inside a function child with native root', ()=> {
+		const mountSpy = vi.fn()
+		const Child = ()=> {
+			onMount(mountSpy)
+			return h('span', null, 'inner')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h('div', null, ()=> h(Child)))
+
+		expect(container.textContent).toBe('inner')
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
 	it('disposeOwner executes effects in child-first order', ()=> {
 		const order = []
 		const parentOwner = createOwner(null)
@@ -1385,6 +1453,113 @@ describe('onMount when a component returns a thunk (regression: OWNER lost on dr
 		expect(refSpy).toHaveBeenCalledTimes(1)
 		expect(refSpy.mock.calls[0][0]).toBeInstanceOf(HTMLDivElement)
 	})
+
+	it('preserves subtree when parent thunk re-evaluates with cached thunk-returning child', ()=> {
+		const trigger = createSignal(0)
+
+		const Child = ()=> {
+			return ()=> h('span', null, 'hello')
+		}
+
+		const Parent = ()=> {
+			const childDesc = h(Child)
+			return ()=> h('div', { 'data-trigger': trigger() }, childDesc)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		expect(container.textContent).toBe('hello')
+
+		trigger(prev => prev + 1)
+
+		expect(container.textContent).toBe('hello')
+		expect(container.querySelector('span')).toBeTruthy()
+	})
+
+	it('preserves subtree across multiple parent thunk re-evaluations', ()=> {
+		const trigger = createSignal(0)
+
+		const Child = ()=> {
+			return ()=> h('span', null, 'hello')
+		}
+
+		const Parent = ()=> {
+			const childDesc = h(Child)
+			return ()=> h('div', { 'data-trigger': trigger() }, childDesc)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		expect(container.textContent).toBe('hello')
+
+		trigger(prev => prev + 1)
+		expect(container.textContent).toBe('hello')
+
+		trigger(prev => prev + 1)
+		expect(container.textContent).toBe('hello')
+
+		trigger(prev => prev + 1)
+		expect(container.textContent).toBe('hello')
+	})
+
+	it('preserves child thunk content that uses reactive inner signal', ()=> {
+		const outerTrigger = createSignal(0)
+		const show = createSignal(true)
+
+		const Child = ()=> {
+			return ()=> show() ? h('span', null, 'visible') : null
+		}
+
+		const Parent = ()=> {
+			const childDesc = h(Child)
+			return ()=> h('div', { 'data-outer': outerTrigger() }, childDesc)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		expect(container.textContent).toBe('visible')
+
+		outerTrigger(prev => prev + 1)
+		expect(container.textContent).toBe('visible')
+
+		show(false)
+		expect(container.textContent).toBe('')
+	})
+
+	it('does not double-fire onMount for re-materialized thunk child', ()=> {
+		const outerTrigger = createSignal(0)
+		const childMount = vi.fn()
+		const childCleanup = vi.fn()
+
+		const Child = ()=> {
+			onMount(childMount)
+			onCleanup(childCleanup)
+			return ()=> h('span', null, 'hello')
+		}
+
+		const Parent = ()=> {
+			const childDesc = h(Child)
+			return ()=> h('div', { 'data-outer': outerTrigger() }, childDesc)
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Parent))
+
+		expect(childMount).toHaveBeenCalledTimes(1)
+		expect(childCleanup).toHaveBeenCalledTimes(0)
+
+		outerTrigger(prev => prev + 1)
+
+		expect(childMount).toHaveBeenCalledTimes(2)
+		expect(childCleanup).toHaveBeenCalledTimes(1)
+	})
 })
 
 describe('control flow: Either and mountDynamic', ()=> {
@@ -1818,6 +1993,244 @@ describe('DOM template cloning (template / insert / setProp)', ()=> {
 		title('published')
 		expect(el.title).toBe('published')
 	})
+
+	// Regression: babel-preset-plastic's template fast path folds
+	// `<span ref={setEl} />` and emits `setProp(el, 'ref', () => setEl)`.
+	// setProp must invoke the ref callback (mirroring applyProps' ref branch),
+	// otherwise refs on template-folded elements never fire.
+	it('setProp() invokes a ref accessor emitted as a thunk', ()=> {
+		const el = document.createElement('span')
+		const refFn = vi.fn()
+		setProp(el, 'ref', ()=> refFn)
+		expect(refFn).toHaveBeenCalledTimes(1)
+		expect(refFn).toHaveBeenCalledWith(el)
+	})
+
+	// Regression: babel-preset-plastic's accessorFor passes inline arrow
+	// function expressions through verbatim (does not wrap in a thunk),
+	// so setProp receives the callback itself. Calling it as a thunk (with
+	// no arguments) would invoke the callback with undefined, silently
+	// losing the element reference.
+	it('setProp() invokes an inline arrow ref directly (not as a thunk)', ()=> {
+		const el = document.createElement('span')
+		const received = []
+		setProp(el, 'ref', (node)=> { received.push(node) })
+		expect(received).toHaveLength(1)
+		expect(received[0]).toBe(el)
+	})
+
+	it('setProp() invokes an inline function expression ref directly', ()=> {
+		const el = document.createElement('span')
+		const received = []
+		setProp(el, 'ref', function (node) { received.push(node) })
+		expect(received).toHaveLength(1)
+		expect(received[0]).toBe(el)
+	})
+
+	it('setProp() ref defers until owner mount', ()=> {
+		const owner = createOwner(null)
+		const el = document.createElement('span')
+		const refFn = vi.fn()
+		runWithOwner(owner, ()=> {
+			setProp(el, 'ref', ()=> refFn)
+		})
+		expect(refFn).not.toHaveBeenCalled()
+		runOwnerMounts(owner)
+		expect(refFn).toHaveBeenCalledWith(el)
+	})
+
+	it('setProp() ref cleanup nulls the ref on owner dispose', ()=> {
+		const owner = createOwner(null)
+		const el = document.createElement('span')
+		const refFn = vi.fn()
+		runWithOwner(owner, ()=> {
+			setProp(el, 'ref', ()=> refFn)
+		})
+		runOwnerMounts(owner)
+		refFn.mockClear()
+		disposeOwner(owner)
+		expect(refFn).toHaveBeenCalledWith(null)
+	})
+
+	// Regression: setProp originally probed the accessor once at attach time
+	// to decide between "thunk returning the handler" and "the handler itself"
+	// shapes. The probe failed for any handler that was undefined at attach
+	// time (signal-backed handlers, async-populated APIs), permanently locking
+	// useUnwrap=false and silently dispatching to the thunk itself — the real
+	// handler never fired. The fix unwraps lazily at dispatch time.
+	it('setProp() event: thunk returning a handler defined AFTER attach still fires', ()=> {
+		const el = document.createElement('button')
+		const store = { onPress: undefined }
+		setProp(el, 'onClick', ()=> store.onPress)
+		// Handler is still undefined at this point; the previous probe would
+		// have locked the listener into never-unwrap mode.
+		store.onPress = vi.fn()
+		el.click()
+		expect(store.onPress).toHaveBeenCalledTimes(1)
+	})
+
+	it('setProp() event: inline arrow handler receives the event arg', ()=> {
+		const el = document.createElement('button')
+		const handler = vi.fn()
+		setProp(el, 'onClick', handler)
+		el.click()
+		expect(handler).toHaveBeenCalledTimes(1)
+		expect(handler.mock.calls[0][0]).toBeInstanceOf(Event)
+	})
+
+	it('setProp() event: babel-style thunk dispatches the wrapped handler', ()=> {
+		const el = document.createElement('button')
+		const handler = vi.fn()
+		setProp(el, 'onClick', ()=> handler)
+		el.click()
+		expect(handler).toHaveBeenCalledTimes(1)
+		expect(handler.mock.calls[0][0]).toBeInstanceOf(Event)
+	})
+
+	it('setProp() event: signal-swapped handler stays live without re-attach', ()=> {
+		const el = document.createElement('button')
+		const first = vi.fn()
+		const second = vi.fn()
+		const current = createSignal(first)
+		setProp(el, 'onClick', ()=> current())
+		el.click()
+		expect(first).toHaveBeenCalledTimes(1)
+		current(second)
+		el.click()
+		expect(first).toHaveBeenCalledTimes(1)
+		expect(second).toHaveBeenCalledTimes(1)
+	})
+
+	it('setProp() event: does NOT call the accessor at attach time (no probe side effects)', ()=> {
+		const el = document.createElement('button')
+		const accessor = vi.fn(()=> undefined)
+		setProp(el, 'onClick', accessor)
+		expect(accessor).not.toHaveBeenCalled()
+	})
+
+	it('setProp() event: listener is removed on owner dispose', ()=> {
+		const owner = createOwner(null)
+		const el = document.createElement('button')
+		const handler = vi.fn()
+		runWithOwner(owner, ()=> {
+			setProp(el, 'onClick', ()=> handler)
+		})
+		el.click()
+		expect(handler).toHaveBeenCalledTimes(1)
+		disposeOwner(owner)
+		el.click()
+		expect(handler).toHaveBeenCalledTimes(1)
+	})
+
+	it('setProp() event: unsupported event name is a no-op', ()=> {
+		const el = document.createElement('div')
+		const handler = vi.fn()
+		expect(()=> setProp(el, 'onTotallyMadeUp', handler)).not.toThrow()
+	})
+})
+
+describe('bindReactiveProp: getter-defined props (regression: static fast path lost reactivity)', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	// Regression: bindReactiveProp's static fast path skipped the binding
+	// effect for any plain-object props where rawValue was not isReactive.
+	// But a plain object can expose a key via `get foo() { return sig() }`
+	// — the getter reads the signal, the resolved value is a primitive
+	// string, isReactive(string)===false → static path taken, signal read
+	// happened outside any effect, dependency never registered.
+	it('subscribes through a real accessor descriptor and re-renders on signal change', ()=> {
+		const sig = createSignal('Ada')
+		const props = {
+			get title(){
+				return sig()
+			},
+		}
+		const el = h('div', props)
+		expect(el.title).toBe('Ada')
+		sig('Grace')
+		expect(el.title).toBe('Grace')
+	})
+
+	it('handles getter returning undefined initially then a value later', ()=> {
+		const sig = createSignal(undefined)
+		const props = {
+			get id(){
+				return sig()
+			},
+		}
+		const el = h('div', props)
+		expect(el.id).toBe('')
+		sig('chart')
+		expect(el.id).toBe('chart')
+	})
+
+	it('getter for className participates in classList reconciliation on signal change', ()=> {
+		const sig = createSignal('row primary')
+		const props = {
+			get className(){
+				return sig()
+			},
+		}
+		const el = h('div', props)
+		expect([...el.classList].sort()).toEqual(['primary', 'row'])
+		sig('row danger')
+		expect([...el.classList].sort()).toEqual(['danger', 'row'])
+	})
+
+	it('getter for style object updates inline styles on signal change', ()=> {
+		const color = createSignal('red')
+		const props = {
+			get style(){
+				return { color: color() }
+			},
+		}
+		const el = h('div', props)
+		expect(el.style.color).toBe('red')
+		color('blue')
+		expect(el.style.color).toBe('blue')
+	})
+
+	it('plain data props still take the static fast path (no binding effect overhead)', ()=> {
+		// Sanity guard: the fix must not regress static literal props onto the
+		// effect path. We can't directly inspect the effect tree, but if a
+		// non-reactive prop reads correctly with no signal involvement, we know
+		// the fast path is intact.
+		const el = h('div', { id: 'static', title: 'plain' })
+		expect(el.id).toBe('static')
+		expect(el.title).toBe('plain')
+	})
+})
+
+describe('node2Element: non-Node objects with a stray nodeType field', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	// Regression: node2Element previously checked `node.nodeType != null`,
+	// which silently let any plain object carrying a non-numeric nodeType
+	// field through as a "Node", then exploded inside parent.appendChild
+	// with TypeError. Tighten to typeof === 'number' so unknown shapes fall
+	// through to createPlaceholder.
+	it('does not treat a plain object with a non-numeric nodeType as a Node', ()=> {
+		const fakeNode = { nodeType: 'not-a-number', message: 'hi' }
+		const Comp = ()=> fakeNode
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		// Must not throw — the object should fall through to a placeholder.
+		expect(()=> renderApp(container, h(Comp))).not.toThrow()
+	})
+
+	it('still accepts a real DOM node returned from a component', ()=> {
+		const real = document.createElement('span')
+		real.textContent = 'real'
+		const Comp = ()=> real
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Comp))
+		expect(container.textContent).toBe('real')
+	})
 })
 
 // A bug entroduced, on 2026-05-12, in the commit 7e236eb "feat: add mergeProps and splitProps":
@@ -1964,8 +2377,93 @@ describe('applyProps dynamic-key proxy: DOM mutation minimality', ()=> {
 		expect(after.length).toBe(before.length)
 		after.forEach((node, i)=> {
 			expect(node).toBe(before[i])
-		})
 	})
+})
+
+describe('renderApp white-box: mountOwnedSubtree coverage', ()=> {
+	afterEach(()=> {
+		document.body.innerHTML = ''
+	})
+
+	it('mounts owners in subtree when root is a native element (no OWNER on root)', ()=> {
+		const mountSpy = vi.fn()
+		const Inner = ()=> {
+			onMount(mountSpy)
+			return h('span', null, 'x')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h('div', null, h(Inner)))
+
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('onMount fires for component root and also for nested owners inside native wrappers', ()=> {
+		const order = []
+		const Outer = ()=> {
+			onMount(()=> order.push('outer'))
+			return h('main', null, h(Inner))
+		}
+		const Inner = ()=> {
+			onMount(()=> order.push('inner'))
+			return h('section', null, h('p', null, 'deep'))
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h(Outer))
+
+		expect(order).toEqual(['inner', 'outer'])
+	})
+
+	it('does not fire onMount when container is not in the live DOM (isConnected check)', ()=> {
+		const mountSpy = vi.fn()
+		const Comp = ()=> {
+			onMount(mountSpy)
+			return h('span', null, 'x')
+		}
+
+		const container = document.createElement('div')
+		renderApp(container, h(Comp))
+
+		expect(mountSpy).toHaveBeenCalledTimes(0)
+	})
+
+	it('does not fire onMount for native-root tree when container is detached', ()=> {
+		const mountSpy = vi.fn()
+		const Inner = ()=> {
+			onMount(mountSpy)
+			return h('b', null, 'x')
+		}
+
+		const container = document.createElement('div')
+		renderApp(container, h('div', null, h(Inner)))
+
+		expect(mountSpy).toHaveBeenCalledTimes(0)
+	})
+
+	it('fires onMount for sibling owners inside a native-rooted tree', ()=> {
+		const mountA = vi.fn()
+		const mountB = vi.fn()
+		const A = ()=> {
+			onMount(mountA)
+			return h('span', null, 'A')
+		}
+		const B = ()=> {
+			onMount(mountB)
+			return h('span', null, 'B')
+		}
+
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		renderApp(container, h('div', null, h(A), h(B)))
+
+		expect(mountA).toHaveBeenCalledTimes(1)
+		expect(mountB).toHaveBeenCalledTimes(1)
+	})
+})
+
 
 	it('disposes a removed key exactly once and leaves surviving keys untouched', ()=> {
 		const keys = createSignal(['data-state', 'data-extra'])

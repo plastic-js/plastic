@@ -15,7 +15,7 @@ import {
 	Router,
 	h,
 	lazy,
-	renderApp,
+	renderApp as renderAppRaw,
 	useLocation,
 	useMatch,
 	useNavigate,
@@ -26,7 +26,20 @@ import {
 } from '../src/index.js'
 
 describe('router', ()=> {
+	// Router shares a module-level location signal across tests. Without disposing
+	// each test's owners, stale subscribers leak forward and react to the next
+	// test's location writes, contaminating textContent / params / state.
+	const activeDisposers = []
+	const renderApp = (container, node)=> {
+		const dispose = renderAppRaw(container, node)
+		activeDisposers.push(dispose)
+		return dispose
+	}
+
 	afterEach(()=> {
+		while (activeDisposers.length){
+			activeDisposers.pop()()
+		}
 		document.body.innerHTML = ''
 		window.history.replaceState(null, '', '/')
 	})
@@ -298,6 +311,67 @@ describe('router', ()=> {
 
 		renderApp(container, h(App))
 		expect(container.textContent).toBe('99')
+	})
+
+	it('re-invokes route component when URL changes within the same dynamic route', ()=> {
+		window.history.replaceState(null, '', '/users/1')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		let renderCount = 0
+		const seen = []
+
+		const User = ()=> {
+			renderCount++
+			const params = useParams()
+			seen.push(params.id)
+			return h('p', { 'data-test': 'user' }, `id=${params.id}`)
+		}
+
+		const App = ()=> h(Router, null, h(Route, {
+			path: '/users/:id',
+			component: User,
+		}))
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('id=1')
+		expect(renderCount).toBe(1)
+
+		window.history.pushState(null, '', '/users/2')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(container.textContent).toBe('id=2')
+		expect(renderCount).toBe(2)
+
+		window.history.pushState(null, '', '/users/3')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(container.textContent).toBe('id=3')
+		expect(seen).toEqual(['1', '2', '3'])
+	})
+
+	it('default (catch-all) route re-invokes component when URL changes between two unmatched paths', ()=> {
+		window.history.replaceState(null, '', '/missing-one')
+		const container = document.createElement('div')
+		document.body.appendChild(container)
+		let renderCount = 0
+
+		const NotFound = ()=> {
+			renderCount++
+			const loc = useLocation()
+			return h('p', null, `404:${loc().pathname}`)
+		}
+
+		const App = ()=> h(Router, null,
+			h(Route, { path: '/known', component: ()=> h('p', null, 'known') }),
+			h(Route, { path: '*', component: NotFound }),
+		)
+
+		renderApp(container, h(App))
+		expect(container.textContent).toBe('404:/missing-one')
+		expect(renderCount).toBe(1)
+
+		window.history.pushState(null, '', '/missing-two')
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		expect(container.textContent).toBe('404:/missing-two')
+		expect(renderCount).toBe(2)
 	})
 
 	it('useSearchParams exposes query accessor and setter', ()=> {
