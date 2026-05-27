@@ -322,7 +322,21 @@ const createReactiveTextNode = (reactiveValue)=> {
 
 const materializeComponentDescriptor = (descriptor)=> {
 	if (descriptor.instance instanceof Node){
-		return descriptor.instance
+		// DocumentFragments are one-shot: once appended/inserted into a parent
+		// node their children are transferred and the fragment becomes empty.
+		// A cached drained fragment would silently lose all children on
+		// re-materialization (e.g. when a thunk-returning component is used as
+		// a child of another thunk-returning component).  Detect this case and
+		// force a fresh materialization instead.
+		if (descriptor.instance instanceof DocumentFragment && descriptor.instance.childNodes.length === 0){
+			if (descriptor._owner){
+				disposeOwner(descriptor._owner)
+				descriptor._owner = null
+			}
+			descriptor.instance = null
+		} else {
+			return descriptor.instance
+		}
 	}
 
 	const owner = createOwner(currentOwner)
@@ -367,6 +381,7 @@ const materializeComponentDescriptor = (descriptor)=> {
 		normalized[OWNER] = owner
 	}
 
+	descriptor._owner = owner
 	descriptor.instance = normalized
 	return normalized
 }
