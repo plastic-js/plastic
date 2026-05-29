@@ -67,7 +67,7 @@ const renderInOwner = (owner, result)=> runWithOwner(owner, ()=> node2Element(re
 // Reactive child updates can insert plain DOM wrappers that contain mounted
 // component roots deeper in the subtree, so walk the inserted nodes and run
 // any deferred owner mounts we find.
-const mountOwnedSubtree = (node)=> {
+const mountOwnedSubtree = (node, {force = false} = {})=> {
 	if (!(node instanceof Node)){
 		return
 	}
@@ -76,7 +76,16 @@ const mountOwnedSubtree = (node)=> {
 	while (stack.length){
 		const current = stack.pop()
 		const owner = current[OWNER]
-		if (owner && !owner.mounted && current.isConnected){
+		// `force` is set by explicit mount boundaries (renderApp), where the
+		// caller wants the tree mounted even if the container isn't attached to
+		// a document yet. Downstream insertion paths leave it false so mount
+		// stays deferred until the parent is actually connected.
+		//
+		// In production renderApp is almost always given a container already in
+		// the document, so `current.isConnected` is true and `force` is a no-op;
+		// it only changes behavior for a detached container (the common testing
+		// pattern), so it carries no risk for production rendering.
+		if (owner && !owner.mounted && (force || current.isConnected)){
 			runOwnerMounts(owner)
 		}
 
@@ -1436,7 +1445,10 @@ const renderApp = (container, node)=> {
 	// Walk the full DOM subtree to find all component owners and fire their
 	// onMount callbacks. The root node may be a native element (e.g. <div>)
 	// which never gets an OWNER reference, but nested component outputs do.
-	placedNodes.forEach(n=> mountOwnedSubtree(n))
+	// renderApp is an explicit mount boundary — fire onMount regardless of
+	// whether `container` is currently attached to a document, so detached
+	// containers (the common testing pattern) still run lifecycle callbacks.
+	placedNodes.forEach(n=> mountOwnedSubtree(n, {force: true}))
 
 	// Return a disposer function
 	let disposed = false

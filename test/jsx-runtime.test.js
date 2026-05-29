@@ -27,6 +27,7 @@ import {
 	setProp,
 	template,
 	onMount,
+	onUnmount,
 	renderApp,
 	runOwnerMounts,
 	runWithOwner,
@@ -936,6 +937,63 @@ describe('lifecycle & cleanup management', ()=> {
 
 		dispose()
 		expect(container.childNodes).toHaveLength(0)
+	})
+
+	it('fires onMount for a component rendered into a detached container', ()=> {
+		const mountSpy = vi.fn()
+		const Comp = ()=> {
+			onMount(mountSpy)
+			return h('div')
+		}
+
+		// Container is never attached to document.body — renderApp is an
+		// explicit mount boundary and should still run lifecycle callbacks.
+		const container = document.createElement('div')
+		expect(container.isConnected).toBe(false)
+
+		renderApp(container, h(Comp))
+
+		expect(mountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('fires onUnmount on dispose for a component in a detached container', ()=> {
+		const unmountSpy = vi.fn()
+		const Comp = ()=> {
+			onUnmount(unmountSpy)
+			return h('div')
+		}
+
+		const container = document.createElement('div')
+		const dispose = renderApp(container, h(Comp))
+
+		expect(unmountSpy).not.toHaveBeenCalled()
+
+		dispose()
+
+		expect(unmountSpy).toHaveBeenCalledTimes(1)
+	})
+
+	it('defers mount for a child inserted later into a still-detached subtree', ()=> {
+		const mountSpy = vi.fn()
+		const Child = ()=> {
+			onMount(mountSpy)
+			return h('div', null, 'child')
+		}
+
+		const show = createSignal(false)
+		const App = ()=> h('div', null, ()=> show() ? h(Child) : null)
+
+		// Detached container: the renderApp root walk is forced, but the
+		// downstream dynamic-insert path must keep deferring until attachment.
+		const container = document.createElement('div')
+		renderApp(container, h(App))
+		expect(mountSpy).not.toHaveBeenCalled()
+
+		// Insert the child while the subtree is still detached — mount stays
+		// deferred because the insertion path gates on parent.isConnected.
+		show(true)
+		expect(container.textContent).toBe('child')
+		expect(mountSpy).not.toHaveBeenCalled()
 	})
 
 	it('event listener cleanup removes listeners on dispose', ()=> {
@@ -2417,7 +2475,7 @@ describe('renderApp white-box: mountOwnedSubtree coverage', ()=> {
 		expect(order).toEqual(['inner', 'outer'])
 	})
 
-	it('does not fire onMount when container is not in the live DOM (isConnected check)', ()=> {
+	it('fires onMount even when the container is not in the live DOM (renderApp is an explicit mount boundary)', ()=> {
 		const mountSpy = vi.fn()
 		const Comp = ()=> {
 			onMount(mountSpy)
@@ -2427,10 +2485,10 @@ describe('renderApp white-box: mountOwnedSubtree coverage', ()=> {
 		const container = document.createElement('div')
 		renderApp(container, h(Comp))
 
-		expect(mountSpy).toHaveBeenCalledTimes(0)
+		expect(mountSpy).toHaveBeenCalledTimes(1)
 	})
 
-	it('does not fire onMount for native-root tree when container is detached', ()=> {
+	it('fires onMount for native-root tree when container is detached', ()=> {
 		const mountSpy = vi.fn()
 		const Inner = ()=> {
 			onMount(mountSpy)
@@ -2440,7 +2498,7 @@ describe('renderApp white-box: mountOwnedSubtree coverage', ()=> {
 		const container = document.createElement('div')
 		renderApp(container, h('div', null, h(Inner)))
 
-		expect(mountSpy).toHaveBeenCalledTimes(0)
+		expect(mountSpy).toHaveBeenCalledTimes(1)
 	})
 
 	it('fires onMount for sibling owners inside a native-rooted tree', ()=> {
