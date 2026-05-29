@@ -14,19 +14,27 @@ const createControlFlow = ({
 	flushPendingDescriptors,
 })=> {
 	// Reactively replaces DOM content after a comment anchor.
-	// getContent() is called inside a binding effect - any signals it reads
-	// will trigger a branch switch when they change.
-	// On each switch: the previous branch owner is disposed (cleaning up all its
-	// effects and event listeners), its DOM nodes are removed, and the new branch
-	// is rendered in a fresh child owner.
-	const mountDynamic = (anchor, getContent)=> {
+	// selectBranch() runs tracked - it should read condition signals and return
+	// a *branch factory* (or null) identifying which branch to render. The DOM
+	// is only torn down and rebuilt when that factory identity changes, so signal
+	// churn that doesn't flip the branch is a no-op (matches Solid's <Show>).
+	const NO_BRANCH = Symbol('no-branch')
+
+	const mountDynamic = (anchor, selectBranch)=> {
 		let prevNodes = []
 		let prevOwner = null
+		let prevBranch = NO_BRANCH
 		// Capture the Either component's owner at call time so branch owners are always
 		// parented correctly even when the effect re-runs outside component context.
 		const hostOwner = getCurrentOwner()
 
 		const update = ()=> {
+			const branch = selectBranch()
+			if (branch === prevBranch){
+				return
+			}
+			prevBranch = branch
+
 			if (prevOwner){
 				disposeOwner(prevOwner)
 				prevOwner = null
@@ -37,15 +45,14 @@ const createControlFlow = ({
 			const owner = createOwner(hostOwner)
 			const prevComp = getCurrentComputation()
 			setCurrentComputation(null)
-			// NOTE: unlike materializeComponentDescriptor / Loop's renderRow, we do
-			// NOT wrap these in runUntracked. getContent reads tracking signals
-			// (e.g. the condition for Either/Match) AND invokes lazy branch
-			// factories that materialize JSX in the same call. Detaching activeSub
-			// here would silence the condition subscription. The auto-parent-link
-			// pattern that bites Loop's reused rows is harmless here because
-			// disposeOwner(prevOwner) above pre-emptively severs the old branch's
-			// effects before each re-run, so purgeDeps has nothing stale to walk.
-			const result = runWithOwner(owner, getContent)
+			// Branch invocation runs untracked: the selection above already
+			// subscribed to the discriminator, and the branch's own bindings
+			// will set up their effects under `owner`. Letting them auto-link
+			// into the outer binding effect would re-trigger this update on
+			// every internal signal change and rebuild the DOM unnecessarily.
+			const result = runUntracked(()=> runWithOwner(owner, ()=> (
+				typeof branch === 'function' ? branch() : null
+			)))
 			const node = renderInOwner(owner, result ?? null)
 			setCurrentComputation(prevComp)
 
@@ -110,8 +117,7 @@ const createControlFlow = ({
 
 		mountDynamic(anchor, ()=> {
 			const cond = typeof condition === 'function' ? condition() : condition
-			const branch = cond ? activeTrue : activeFalse
-			return branch ? branch() : null
+			return cond ? activeTrue : activeFalse
 		})
 
 		return fragment
@@ -156,10 +162,10 @@ const createControlFlow = ({
 					continue
 				}
 
-				return typeof slot.branch === 'function' ? slot.branch() : null
+				return typeof slot.branch === 'function' ? slot.branch : null
 			}
 
-			return typeof defaultBranch === 'function' ? defaultBranch() : null
+			return typeof defaultBranch === 'function' ? defaultBranch : null
 		})
 
 		return fragment
