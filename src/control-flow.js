@@ -154,7 +154,12 @@ const createControlFlow = ({
 		}
 
 		mountDynamic(anchor, ()=> {
-			const activeCases = Array.isArray(cases) ? cases : []
+			// cases may be a function so callers (e.g. router) can produce fresh
+			// branch closures on every selection pass, ensuring branch identity
+			// changes when the underlying match data changes even if the
+			// discriminator value happens to be equal.
+			const resolvedCases = typeof cases === 'function' ? cases() : cases
+			const activeCases = Array.isArray(resolvedCases) ? resolvedCases : []
 			const valueToMatch = resolve(value)
 
 			for (const slot of activeCases){

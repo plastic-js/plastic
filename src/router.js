@@ -389,38 +389,49 @@ const buildRouteMatch = (routes, currentLocation, basePath)=> {
 		return candidate.index
 	}
 
-	const cases = nonDefault.map((r, i)=> ({
-		when: i,
-		branch: ()=> {
-			const candidate = readCandidateMatch()
-			if (candidate.index !== i || !candidate.match){
-				return null
-			}
-			return h(RouteMatchContext.Provider, {
-				value: candidate.match,
-				children: ()=> r.branch(candidate.match),
-			})
-		},
-	}))
-
-	let defaultBranch
-	if (defaultRoute){
-		defaultBranch = ()=> {
-			const candidate = readCandidateMatch()
-			if (!candidate.match){
-				return defaultRoute.branch(null)
-			}
-			return h(RouteMatchContext.Provider, {
-				value: candidate.match,
-				children: ()=> defaultRoute.branch(candidate.match),
+	// Return a fresh array of slots on every selection pass so that branch
+	// closures get new identities when the URL changes even within the same
+	// route index. Without this, mountDynamic's branch-identity short-circuit
+	// would skip re-rendering when only params/search change, leaving
+	// component-level reads like `params.id` stuck on the initial value.
+	// The default route is folded in as a synthetic case (when === -1) so it
+	// benefits from the same per-pass freshness — a catch-all matching two
+	// different URLs in a row must re-invoke its component.
+	const cases = ()=> {
+		const slots = nonDefault.map((r, i)=> ({
+			when: i,
+			branch: ()=> {
+				const candidate = readCandidateMatch()
+				if (candidate.index !== i || !candidate.match){
+					return null
+				}
+				return h(RouteMatchContext.Provider, {
+					value: candidate.match,
+					children: ()=> r.branch(candidate.match),
+				})
+			},
+		}))
+		if (defaultRoute){
+			slots.push({
+				when: -1,
+				branch: ()=> {
+					const candidate = readCandidateMatch()
+					if (!candidate.match){
+						return defaultRoute.branch(null)
+					}
+					return h(RouteMatchContext.Provider, {
+						value: candidate.match,
+						children: ()=> defaultRoute.branch(candidate.match),
+					})
+				},
 			})
 		}
+		return slots
 	}
 
 	return h(Match, {
 		value: activeIndex,
 		cases,
-		...defaultBranch ? { defaultBranch } : {},
 	})
 }
 
