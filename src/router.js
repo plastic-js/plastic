@@ -495,7 +495,8 @@ const createNavigationApi = (setCurrentLocation, root = '/')=> {
 }
 
 const Router = ({ children, root = '/' })=> {
-	const currentLocation = createSignal(readCurrentLocation(root))
+	const currentLocation = sharedRouterState.currentLocation
+	currentLocation(readCurrentLocation(root))
 	const currentPath = ()=> currentLocation().pathname
 	const syncPath = ()=> {
 		currentLocation(readCurrentLocation(root))
@@ -508,7 +509,6 @@ const Router = ({ children, root = '/' })=> {
 	}
 
 	const navigation = createNavigationApi(currentLocation, root)
-	sharedRouterState.currentLocation = currentLocation
 	sharedRouterState.navigate = navigation.navigate
 	sharedRouterState.createHref = navigation.createHref
 	touchSharedRouter()
