@@ -56,6 +56,15 @@ const createControlFlow = ({
 			const node = renderInOwner(owner, result ?? null)
 			setCurrentComputation(prevComp)
 
+			// When the branch returns an array (e.g. items.map(...) or spread
+			// children), node2Element defers component descriptors onto the
+			// DocumentFragment without flushing them.  Flush here with the
+			// branch owner so deferred children materialize in the DOM instead
+			// of remaining as silent placeholder comments.
+			if (node instanceof DocumentFragment && flushPendingDescriptors){
+				runWithOwner(owner, ()=> flushPendingDescriptors(node))
+			}
+
 			// Collect child refs before insertion: DocumentFragment drains on append.
 			if (node instanceof DocumentFragment){
 				prevNodes = [...node.childNodes]
