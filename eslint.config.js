@@ -3,6 +3,9 @@ import jsx from 'eslint-config-janus/react.js'
 import globals from 'globals'
 
 export default [
+	{
+		ignores: ['showcase/**', 'bench/**', 'e2e/**', 'test/**'],
+	},
 	...js,
 	...jsx,
 	{
